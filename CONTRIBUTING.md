@@ -1,16 +1,8 @@
 # Contributing to VSeerr
 
-Thank you for your interest in VSeerr. It is a small fork of [Seerr](https://github.com/seerr-team/seerr) with one goal: request buckets, kept in step with every Seerr release.
+Thank you for your interest in VSeerr. It is a small fork of [Seerr](https://github.com/seerr-team/seerr) with one goal: versions, kept in step with every Seerr release.
 
-## AI disclosure
-
-VSeerr is vibe coded, and AI-assisted contributions are welcome. Every pull request must say whether AI was used and roughly how much, in the **AI disclosure** section of the pull request template. For example:
-
-> **AI disclosure:** Written with Claude Code.
-
-> **AI disclosure:** None.
-
-Pull requests without a disclosure are closed until one is added.
+VSeerr is vibe coded, and AI-assisted contributions are welcome. Pull requests are judged on the code: it has to pass the checks and fit the scope below.
 
 ## What fits in VSeerr
 
@@ -18,20 +10,20 @@ VSeerr deliberately changes little, so that new Seerr releases merge cleanly.
 
 **Welcome:**
 
-- bucket features and fixes
+- version features and fixes
 - fixes for problems that exist only in VSeerr
 - documentation, tests and project tooling for the above
 
 **Please send to Seerr instead:**
 
 - bugs that also exist in Seerr
-- features unrelated to buckets
+- features unrelated to versions
 
-Note that Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob/develop/CONTRIBUTING.md), which does not accept AI-driven contributions. VSeerr picks up Seerr's changes when Seerr releases them.
+Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob/develop/CONTRIBUTING.md), which does not accept AI-driven contributions. VSeerr picks up Seerr's changes when Seerr releases them.
 
 ## Keeping changes small
 
-- **New code in new files.** Put bucket code in new files where possible, and keep edits to existing Seerr files to small hooks that call into it. The fewer lines VSeerr changes in Seerr's files, the fewer conflicts each release brings.
+- **New code in new files.** Put version code in new files where possible, and keep edits to existing Seerr files to small hooks that call into it. The fewer lines VSeerr changes in Seerr's files, the fewer conflicts each release brings.
 - **Additive database changes.** Add new tables or columns. Do not rename, repurpose or drop Seerr's. Every migration needs a SQLite and a PostgreSQL version.
 - **Do not reformat Seerr's code.** Run the formatter on your own changes only.
 - **No new kinds of stored credentials.**
@@ -63,8 +55,6 @@ pnpm test
 pnpm build
 pnpm i18n:extract   # if you changed any UI text
 ```
-
-Pull request titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), for example `feat(buckets): show bucket name on request cards`.
 
 ### Database migrations
 

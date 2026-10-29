@@ -12,13 +12,13 @@ A useful report includes:
 - steps to reproduce, or a proof of concept
 - what an attacker could do with it
 
-Reports written with AI assistance are welcome. Please say so in the report.
+Reports written with AI assistance are welcome.
 
 ## Seerr or VSeerr
 
 VSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr). Most of its code comes unchanged from Seerr.
 
-- If the problem is in the bucket feature, or exists only in VSeerr, report it here.
+- If the problem is in the versions feature, or exists only in VSeerr, report it here.
 - If it also affects Seerr, please report it to Seerr through [their security policy](https://github.com/seerr-team/seerr/security/policy). VSeerr picks up the fix when Seerr releases it. You are welcome to tell us as well.
 - If it is in a third-party dependency, please report it to that project. You can also tell us, so we can update the dependency as soon as a fix is available.
 
