@@ -1,0 +1,13 @@
+# Files that VSeerr maintains itself. When a Seerr release is merged into
+# VSeerr, these paths always keep VSeerr's version, so upstream edits to them
+# never cause conflicts. Read by .github/workflows/vseerr-upstream-check.yml.
+# Check the release notes for anything worth copying over by hand.
+# One path per line; lines starting with # are ignored.
+.github/README.md
+.github/CODEOWNERS
+.github/PULL_REQUEST_TEMPLATE.md
+.github/ISSUE_TEMPLATE/config.yml
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+NOTICE.md
+SECURITY.md

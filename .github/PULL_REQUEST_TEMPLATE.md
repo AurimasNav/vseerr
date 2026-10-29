@@ -1,33 +1,34 @@
 <!--
-    Please read contributing guide before submitting
-    your pull request. Please fill in each section below to help us better prioritize your pull request. Thanks!
+    Please read the contributing guide before opening a pull request:
+    https://github.com/AurimasNav/vseerr/blob/main/CONTRIBUTING.md
 -->
 
 ## Description
 
-<!--- Describe your changes in detail -->
-<!--- Why is this change required? What problem does it solve? -->
-<!--- If it fixes an open issue, please link to the issue here. -->
+<!--- What does this change, and why? -->
+<!--- If it fixes an open issue, link it here. -->
 
 - Fixes #XXXX
 
+## AI disclosure
+
+<!--- Required. Say whether AI was used and roughly how much. -->
+<!--- For example: "Written with Claude Code." or "None." -->
+
 ## How Has This Been Tested?
 
-<!--- Please describe in detail how you tested your changes. -->
-<!--- Include details of your testing environment, and the tests you ran to -->
-<!--- see how your change affects other areas of the code, etc. -->
+<!--- What did you run or check? -->
 
 ## Screenshots / Logs (if applicable)
 
 ## Checklist:
 
-<!--- Go over all the following points, and put an `x` in all the boxes that apply. -->
-<!--- If you're unsure about any of these, don't hesitate to ask. We're here to help! -->
-
-- [ ] I have read and followed the contribution [guidelines](https://github.com/seerr-team/seerr/blob/develop/CONTRIBUTING.md).
-- [ ] Disclosed any use of AI (see our [policy](https://github.com/seerr-team/seerr/blob/develop/CONTRIBUTING.md#ai-assistance-notice))
-- [ ] I have updated the documentation accordingly.
-- [ ] All new and existing tests passed.
+- [ ] I have read and followed the contribution [guide](https://github.com/AurimasNav/vseerr/blob/main/CONTRIBUTING.md).
+- [ ] Disclosed any use of AI in the AI disclosure section above.
+- [ ] The change is about buckets or keeping VSeerr in step with Seerr.
+- [ ] Changes to existing Seerr files are kept as small as possible.
+- [ ] Lint, formatting, type checks and tests pass.
 - [ ] Successful build `pnpm build`
-- [ ] Translation keys `pnpm i18n:extract`
-- [ ] Database migration (if required)
+- [ ] Translation keys `pnpm i18n:extract` (if UI text changed)
+- [ ] SQLite and PostgreSQL migrations (if the database changed)
+- [ ] I have updated the documentation accordingly.

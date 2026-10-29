@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Support via Discord
-    url: https://discord.gg/seerr
-    about: Chat with other users and the Seerr dev team
-  - name: 💬 Support via GitHub Discussions
-    url: https://github.com/seerr-team/seerr/discussions
-    about: Ask questions and discuss with other community members
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/AurimasNav/vseerr/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.
+  - name: 📖 Seerr documentation
+    url: https://docs.seerr.dev
+    about: Setup and configuration are the same as in Seerr.
+  - name: 🐛 Problems that also happen in Seerr
+    url: https://github.com/seerr-team/seerr/issues
+    about: If a problem also happens in Seerr, please report it there.
