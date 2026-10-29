@@ -1,0 +1,214 @@
+---
+# Security checks for VSeerr.
+#
+# Pull requests are blocked only by problems they introduce:
+#   - Trivy: a high or critical vulnerability with a fix available that is
+#     not already present on the base branch;
+#   - Gitleaks: a secret in any commit added by the pull request.
+# Vulnerabilities inherited from Seerr do not block pull requests. They are
+# reported to the Security tab by the full scan below, which runs on every
+# push to main and daily, and are fixed through Renovate security PRs and
+# Seerr releases.
+#
+# Trivy and Gitleaks are downloaded as release binaries and verified against
+# their published checksums instead of using third-party actions.
+name: 'VSeerr Security'
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: '0.76.1'
+  # renovate: datasource=github-releases depName=gitleaks/gitleaks
+  GITLEAKS_VERSION: '8.30.1'
+
+jobs:
+  trivy-pr:
+    name: Trivy (new vulnerabilities)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+          persist-credentials: false
+
+      - name: Checkout base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Install Trivy (checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" && cd "$(mktemp -d)"
+          tv="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL --retry 3 -o "$tv" "$base/$tv"
+          curl -fsSL --retry 3 -o sums "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $tv\$" sums | sha256sum -c -
+          tar xzf "$tv" -C "$HOME/bin" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Scan base and pull request
+        run: |
+          set -euo pipefail
+          for side in base head; do
+            trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --format json --output "$side.json" --quiet "$side"
+          done
+
+      - name: Fail on vulnerabilities not present on the base branch
+        run: |
+          python3 - <<'EOF'
+          import json, os, sys
+
+          def findings(path):
+              # Keyed without the installed version, so a bump that fixes one
+              # advisory but leaves another already-known one is not "new".
+              out = {}
+              for result in json.load(open(path)).get("Results") or []:
+                  for v in result.get("Vulnerabilities") or []:
+                      key = (result["Target"], v["PkgName"], v["VulnerabilityID"])
+                      out[key] = v
+              return out
+
+          base, head = findings("base.json"), findings("head.json")
+          new = sorted(set(head) - set(base))
+          summary = open(os.environ["GITHUB_STEP_SUMMARY"], "a")
+          if not new:
+              print(f"No new fixable high or critical vulnerabilities ({len(head)} inherited).")
+              summary.write(f"No new fixable high or critical vulnerabilities ({len(head)} inherited from the base branch).\n")
+              sys.exit(0)
+          summary.write("| Severity | Package | Installed | Fixed in | ID | File |\n| --- | --- | --- | --- | --- | --- |\n")
+          for key in new:
+              v = head[key]
+              line = f"{v['Severity']} {v['PkgName']} {v['InstalledVersion']} -> {v.get('FixedVersion', '')} {v['VulnerabilityID']} ({key[0]})"
+              print(f"::error::{line}")
+              summary.write(f"| {v['Severity']} | {v['PkgName']} | {v['InstalledVersion']} | {v.get('FixedVersion', '')} | {v['VulnerabilityID']} | {key[0]} |\n")
+          print(f"{len(new)} new fixable high or critical vulnerabilities.")
+          sys.exit(1)
+          EOF
+
+  trivy-report:
+    name: Trivy (full report)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Trivy (checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" && cd "$(mktemp -d)"
+          tv="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL --retry 3 -o "$tv" "$base/$tv"
+          curl -fsSL --retry 3 -o sums "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $tv\$" sums | sha256sum -c -
+          tar xzf "$tv" -C "$HOME/bin" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Scan dependencies and configuration
+        run: >
+          trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --ignore-unfixed
+          --format sarif --output trivy.sarif --quiet .
+
+      - name: Summary
+        run: |
+          python3 - <<'EOF'
+          import json, os, collections
+          levels = collections.Counter()
+          for run in json.load(open("trivy.sarif"))["runs"]:
+              rules = {r["id"]: r for r in run["tool"]["driver"].get("rules", [])}
+              for res in run.get("results", []):
+                  tags = rules.get(res["ruleId"], {}).get("properties", {}).get("tags", [])
+                  levels[next((t for t in tags if t in ("CRITICAL", "HIGH")), "OTHER")] += 1
+          line = f"Fixable findings on {os.environ['GITHUB_REF_NAME']}: critical {levels['CRITICAL']}, high {levels['HIGH']}."
+          print(line)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(line + " Details are in the Security tab.\n")
+          EOF
+
+      - name: Upload to GitHub code scanning
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  gitleaks:
+    name: Gitleaks (secrets in new commits)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Gitleaks (checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" && cd "$(mktemp -d)"
+          tg="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -fsSL --retry 3 -o "$tg" "$base/$tg"
+          curl -fsSL --retry 3 -o sums "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $tg\$" sums | sha256sum -c -
+          tar xzf "$tg" -C "$HOME/bin" gitleaks
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Scan new commits
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Commits that came from Seerr are excluded: they are already public
+          # in Seerr's repository and include intentional test fixtures.
+          git fetch --quiet --no-tags https://github.com/seerr-team/seerr.git \
+            '+refs/tags/v*:refs/upstream-tags/v*'
+          case "$EVENT" in
+            pull_request) range="$PR_BASE..$PR_HEAD" ;;
+            push)
+              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                range="$PUSH_AFTER"
+              else
+                range="$PUSH_BEFORE..$PUSH_AFTER"
+              fi ;;
+            *) range="HEAD" ;;
+          esac
+          echo "Scanning $range, excluding commits from Seerr releases."
+          gitleaks git --redact --no-banner --exit-code 1 \
+            --log-opts="$range --not --glob=refs/upstream-tags/*" .
