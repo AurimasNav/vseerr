@@ -1,5 +1,6 @@
 import { MediaStatus } from '@server/constants/media';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
+import { SERVICE_STATUS_TABLE } from '@server/lib/versionSql';
 import {
   Column,
   Entity,
@@ -10,24 +11,30 @@ import {
 } from 'typeorm';
 import Media from './Media';
 
-@Entity()
-@Index(['mediaId', 'serviceId'], { unique: true })
+// Availability of a title in each version. VSeerr's own table, see
+// server/lib/versionSql.ts.
+@Entity({ name: SERVICE_STATUS_TABLE })
+@Index('IDX_vseerr_service_status_media_service', ['mediaId', 'serviceId'], {
+  unique: true,
+})
 class MediaServiceStatus {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({
+    primaryKeyConstraintName: 'PK_vseerr_service_status',
+  })
   public id: number;
 
   @Column()
-  @Index()
+  @Index('IDX_vseerr_service_status_media')
   public mediaId: number;
 
   @ManyToOne(() => Media, (media) => media.serviceStatuses, {
-    onDelete: 'CASCADE',
+    createForeignKeyConstraints: false,
   })
   @JoinColumn({ name: 'mediaId' })
   public media: Media;
 
   @Column({ type: 'int' })
-  @Index()
+  @Index('IDX_vseerr_service_status_service')
   public serviceId: number;
 
   @Column({ type: 'varchar' })

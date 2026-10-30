@@ -137,6 +137,8 @@ export interface MainSettings {
   applicationUrl: string;
   cacheImages: boolean;
   defaultPermissions: number;
+  // Versions (`radarr:<id>` / `sonarr:<id>`) new users can request.
+  defaultRequestServices?: string[];
   defaultQuotas: {
     movie: Quota;
     tv: Quota;
@@ -415,6 +417,7 @@ class Settings {
         applicationUrl: '',
         cacheImages: false,
         defaultPermissions: Permission.REQUEST,
+        defaultRequestServices: [],
         defaultQuotas: {
           movie: {},
           tv: {},

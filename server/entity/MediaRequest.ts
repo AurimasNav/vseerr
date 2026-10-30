@@ -10,6 +10,7 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -27,14 +28,17 @@ import {
   Index,
   ManyToOne,
   OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
   RelationCount,
   UpdateDateColumn,
+  VirtualColumn,
 } from 'typeorm';
 import Media from './Media';
 import MediaServiceStatus from './MediaServiceStatus';
 import SeasonRequest from './SeasonRequest';
 import { User } from './User';
+import { VersionRequest } from './VSeerrVersions';
 
 export class RequestPermissionError extends Error {}
 export class QuotaRestrictedError extends Error {}
@@ -275,17 +279,13 @@ export class MediaRequest {
 
     if (isServiceSpecific) {
       existingQuery
-        .andWhere('request.isServiceRequest = :isServiceRequest', {
-          isServiceRequest: true,
-        })
+        .andWhere(isVersionRequestSql('request'))
         .andWhere('request.serverId = :serverId', {
           serverId: requestBody.serverId,
         });
     } else {
       existingQuery
-        .andWhere('request.isServiceRequest = :isServiceRequest', {
-          isServiceRequest: false,
-        })
+        .andWhere(`NOT ${isVersionRequestSql('request')}`)
         .andWhere('request.is4k = :is4k', {
           is4k: requestBody.is4k ?? false,
         });
@@ -639,8 +639,19 @@ export class MediaRequest {
   @Column({ nullable: true })
   public serverId: number;
 
-  @Column({ default: false })
+  // Whether this is a version request. Stored in VSeerr's own table so
+  // Seerr's `media_request` table keeps Seerr's columns only.
+  @VirtualColumn({
+    type: 'boolean',
+    query: isVersionRequestSql,
+    transformer: { from: booleanFromDb, to: (value) => value },
+  })
   public isServiceRequest: boolean;
+
+  @OneToOne(() => VersionRequest, (marker) => marker.request, {
+    cascade: ['insert'],
+  })
+  public versionMarker?: VersionRequest;
 
   @Column({ nullable: true })
   public profileId: number;
@@ -690,6 +701,9 @@ export class MediaRequest {
 
   constructor(init?: Partial<MediaRequest>) {
     Object.assign(this, init);
+    if (init?.isServiceRequest && !this.versionMarker) {
+      this.versionMarker = new VersionRequest();
+    }
   }
 
   @AfterInsert()

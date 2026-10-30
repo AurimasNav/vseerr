@@ -15,6 +15,7 @@ import type {
 } from '@server/interfaces/api/mediaInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -327,9 +328,7 @@ mediaRoutes.delete(
             .andWhere('serverId = :serviceId', {
               serviceId: explicitServiceId,
             })
-            .andWhere('isServiceRequest = :isServiceRequest', {
-              isServiceRequest: true,
-            })
+            .andWhere(isVersionRequestSql('"media_request"'))
             .execute();
         });
       } else {

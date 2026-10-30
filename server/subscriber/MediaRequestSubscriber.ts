@@ -21,6 +21,7 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import { upsertMediaServiceStatus } from '@server/lib/mediaServiceStatus';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { getSettings } from '@server/lib/settings';
+import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
 import { isEqual, truncate } from 'lodash';
@@ -1015,9 +1016,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             .where('request.mediaId = :mediaId', { mediaId: media.id })
             .andWhere('request.id != :requestId', { requestId: entity.id })
             .andWhere('request.is4k = :is4k', { is4k: entity.is4k })
-            .andWhere('request.isServiceRequest = :isServiceRequest', {
-              isServiceRequest: false,
-            })
+            .andWhere(`NOT ${isVersionRequestSql('request')}`)
             .andWhere('request.status NOT IN (:...statuses)', {
               statuses: [
                 MediaRequestStatus.DECLINED,

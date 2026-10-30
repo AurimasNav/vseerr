@@ -8,7 +8,7 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.StatusBadge.ServiceStatusBadges', {
-  statusinservice: '{status} in {label}',
+  statusinservice: '{label}: {status}',
 });
 
 interface ServiceStatusBadgesProps {

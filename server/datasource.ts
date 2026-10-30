@@ -12,11 +12,17 @@ import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
+import {
+  ParkedRequest,
+  UserVersion,
+  VersionRequest,
+} from '@server/entity/VSeerrVersions';
 import { Watchlist } from '@server/entity/Watchlist';
 import { IssueCommentSubscriber } from '@server/subscriber/IssueCommentSubscriber';
 import { IssueSubscriber } from '@server/subscriber/IssueSubscriber';
 import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
 import { MediaSubscriber } from '@server/subscriber/MediaSubscriber';
+import { UserVersionsSubscriber } from '@server/subscriber/UserVersionsSubscriber';
 import { isPgsql } from '@server/utils/dbType';
 import fs from 'fs';
 import type { TlsOptions } from 'tls';
@@ -40,6 +46,9 @@ export const entities = [
   User,
   UserPushSubscription,
   UserSettings,
+  ParkedRequest,
+  UserVersion,
+  VersionRequest,
   Watchlist,
 ];
 
@@ -48,6 +57,7 @@ const subscribers = [
   IssueSubscriber,
   MediaRequestSubscriber,
   MediaSubscriber,
+  UserVersionsSubscriber,
 ];
 
 function boolFromEnv(envVar: string, defaultVal = false) {

@@ -44,8 +44,8 @@ const messages = defineMessages('components.CollectionDetails', {
     '{removeLabel} ({count, plural, one {# movie} other {# movies}})',
   requestcollection: 'Request Collection',
   requestcollection4k: 'Request Collection in 4K',
-  requestcollectioninservice: 'Request Collection in {label}',
-  statusinservice: '{status} in {label}',
+  requestcollectioninservice: 'Request Collection ({label} Version)',
+  statusinservice: '{label}: {status}',
 });
 
 interface CollectionDetailsProps {

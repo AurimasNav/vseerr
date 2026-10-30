@@ -37,10 +37,10 @@ const messages = defineMessages('components.RequestButton', {
     'Approve {requestCount, plural, one {4K Request} other {{requestCount} 4K Requests}}',
   decline4krequests:
     'Decline {requestCount, plural, one {4K Request} other {{requestCount} 4K Requests}}',
-  requestinservice: 'Request in {label}',
-  viewrequestinservice: 'View Request in {label}',
-  approverequestinservice: 'Approve Request in {label}',
-  declinerequestinservice: 'Decline Request in {label}',
+  requestinservice: 'Request {label} Version',
+  viewrequestinservice: 'View {label} Request',
+  approverequestinservice: 'Approve {label} Request',
+  declinerequestinservice: 'Decline {label} Request',
 });
 
 interface ButtonOption {

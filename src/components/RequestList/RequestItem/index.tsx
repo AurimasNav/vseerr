@@ -53,6 +53,7 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   removearr: 'Remove from {arr}',
   removemediaerror: 'Something went wrong while removing the media.',
   profileName: 'Profile',
+  version: 'Version',
 });
 
 const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
@@ -694,6 +695,16 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                       </Link>
                     ),
                   })}
+                </span>
+              </div>
+            )}
+            {request.versionName && (
+              <div className="card-field">
+                <span className="card-field-name">
+                  {intl.formatMessage(messages.version)}
+                </span>
+                <span className="flex truncate text-sm text-gray-300">
+                  {request.versionName}
                 </span>
               </div>
             )}

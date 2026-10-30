@@ -83,6 +83,7 @@ jobs:
       typecheck: ${{ steps.typecheck.outcome }}
       lint: ${{ steps.lint.outcome }}
       test: ${{ steps.test.outcome }}
+      roundtrip: ${{ steps.roundtrip.outcome }}
       i18n: ${{ steps.i18n.outcome }}
       build: ${{ steps.build.outcome }}
     env:
@@ -164,6 +165,12 @@ jobs:
           CI: true
         run: pnpm test
 
+      - name: Database round trip with Seerr
+        id: roundtrip
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: pnpm vseerr:roundtrip
+
       - name: Translation keys
         id: i18n
         if: steps.install.outcome == 'success'
@@ -200,6 +207,7 @@ jobs:
           TYPECHECK: ${{ needs.check.outputs.typecheck }}
           LINT: ${{ needs.check.outputs.lint }}
           TEST: ${{ needs.check.outputs.test }}
+          ROUNDTRIP: ${{ needs.check.outputs.roundtrip }}
           I18N: ${{ needs.check.outputs.i18n }}
           BUILD: ${{ needs.check.outputs.build }}
         run: |
@@ -210,7 +218,8 @@ jobs:
           elif [ "$MERGE" = "conflict" ]; then
             summary="merge conflicts"
           elif [ "$INSTALL" = "success" ] && [ "$TYPECHECK" = "success" ] && [ "$LINT" = "success" ] \
-            && [ "$TEST" = "success" ] && [ "$I18N" = "success" ] && [ "$BUILD" = "success" ]; then
+            && [ "$TEST" = "success" ] && [ "$ROUNDTRIP" = "success" ] && [ "$I18N" = "success" ] \
+            && [ "$BUILD" = "success" ]; then
             summary="merges cleanly, checks pass"
           else
             summary="merges cleanly, checks fail"
@@ -233,6 +242,7 @@ jobs:
               echo "| Type check | $(mark "$TYPECHECK") |"
               echo "| Lint | $(mark "$LINT") |"
               echo "| Unit tests | $(mark "$TEST") |"
+              echo "| Database round trip with Seerr | $(mark "$ROUNDTRIP") |"
               echo "| Translation keys | $(mark "$I18N") |"
               echo "| Build | $(mark "$BUILD") |"
               echo

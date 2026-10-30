@@ -26,6 +26,7 @@ import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import ServiceStatusBadges from '@app/components/StatusBadge/ServiceStatusBadges';
 import Season from '@app/components/TvDetails/Season';
+import VersionsPanel from '@app/components/VersionsPanel';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
@@ -1153,6 +1154,13 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
           </div>
         </div>
         <div className="media-overview-right">
+          <VersionsPanel
+            media={data.mediaInfo}
+            services={sonarrServices}
+            isAnime={data.keywords.some(
+              (keyword) => keyword.id === ANIME_KEYWORD_ID
+            )}
+          />
           <div className="media-facts">
             {(!!data.voteCount ||
               (ratingData?.criticsRating && !!ratingData?.criticsScore) ||

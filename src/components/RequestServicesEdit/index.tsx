@@ -4,26 +4,31 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.RequestServicesEdit', {
-  title: 'Request Services',
+  title: 'Versions',
   description:
-    'Control which services this user can submit requests to. With no service selected, the user only sees the default request button.',
-  allServices: 'All Services',
-  allServicesDescription:
-    'Grant permission to request from every configured service. Selecting this automatically enables all individual services below.',
-  radarrService: 'Request in {name} (Movies)',
-  sonarrService: 'Request in {name} (Series)',
-  serviceDescription:
-    'Grant permission to submit requests to the {name} service.',
+    'Versions this user can request. With none selected, the user only sees the regular request button. Users with the Manage Requests permission can request every version.',
+  allServices: 'All Versions',
+  allServicesDescription: 'Allow requests for every version listed below.',
+  radarrService: '{name} (Movies)',
+  sonarrService: '{name} (Series)',
+  serviceDescription: 'Allow requests for the {name} version.',
   noServices:
-    'No services have a request button label configured. Set a "Request Button Label" on a Radarr or Sonarr server to expose it here.',
+    'There are no versions yet. Set a version name on a Radarr or Sonarr server in Settings → Services.',
 });
 
 interface RequestServicesEditProps {
   value: string[];
   onChange: (services: string[]) => void;
+  title?: string;
+  description?: string;
 }
 
-const RequestServicesEdit = ({ value, onChange }: RequestServicesEditProps) => {
+const RequestServicesEdit = ({
+  value,
+  onChange,
+  title,
+  description,
+}: RequestServicesEditProps) => {
   const intl = useIntl();
   const { data: radarrServices } = useSWR<ServiceCommonServer[]>(
     '/api/v1/service/radarr'
@@ -72,9 +77,11 @@ const RequestServicesEdit = ({ value, onChange }: RequestServicesEditProps) => {
   return (
     <div className="mt-10">
       <div className="mb-4">
-        <h3 className="heading">{intl.formatMessage(messages.title)}</h3>
+        <h3 className="heading">
+          {title ?? intl.formatMessage(messages.title)}
+        </h3>
         <p className="description">
-          {intl.formatMessage(messages.description)}
+          {description ?? intl.formatMessage(messages.description)}
         </p>
       </div>
 

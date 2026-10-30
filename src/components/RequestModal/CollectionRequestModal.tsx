@@ -31,15 +31,15 @@ const messages = defineMessages('components.RequestModal', {
   requestSuccess: '<strong>{title}</strong> requested successfully!',
   requestcollectiontitle: 'Request Collection',
   requestcollection4ktitle: 'Request Collection in 4K',
-  requestcollectioninservicetitle: 'Request Collection in {label}',
+  requestcollectioninservicetitle: 'Request Collection ({label} Version)',
   requesterror: 'Something went wrong while submitting the request.',
   selectmovies: 'Select Movie(s)',
   requestmovies: 'Request {count} {count, plural, one {Movie} other {Movies}}',
   requestmovies4k:
     'Request {count} {count, plural, one {Movie} other {Movies}} in 4K',
   requestmoviesinservice:
-    'Request {count} {count, plural, one {Movie} other {Movies}} in {label}',
-  statusinservice: '{status} in {label}',
+    'Request {count} {count, plural, one {Movie} other {Movies}} ({label} Version)',
+  statusinservice: '{label}: {status}',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {

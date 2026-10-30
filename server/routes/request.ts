@@ -25,6 +25,7 @@ import type {
 } from '@server/interfaces/api/requestInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import requestLock, {
@@ -141,7 +142,7 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
           requestStatus: statusFilter,
         })
         .andWhere(
-          '(request.isServiceRequest = true OR (request.is4k = false AND media.status IN (:...mediaStatus)) OR (request.is4k = true AND media.status4k IN (:...mediaStatus)))',
+          `(${isVersionRequestSql('request')} OR (request.is4k = false AND media.status IN (:...mediaStatus)) OR (request.is4k = true AND media.status4k IN (:...mediaStatus)))`,
           {
             mediaStatus: mediaStatusFilter,
           }
@@ -232,21 +233,29 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
             const profileName = radarrServer?.profiles?.find(
               (profile) => profile.id === r.profileId
             )?.name;
-            const serverName =
+            const radarrSettings =
               r.serverId != null
-                ? settings.radarr.find((s) => s.id === r.serverId)?.name
+                ? settings.radarr.find((s) => s.id === r.serverId)
                 : undefined;
+            const serverName = radarrSettings?.name;
+            const versionName = r.isServiceRequest
+              ? radarrSettings?.buttonLabel
+              : undefined;
 
-            return { ...r, profileName, serverName };
+            return { ...r, profileName, serverName, versionName };
           }
           case MediaType.TV: {
             const sonarrServer = sonarrServers.find(
               (serverr) => serverr.id === r.serverId
             );
-            const serverName =
+            const sonarrSettings =
               r.serverId != null
-                ? settings.sonarr.find((s) => s.id === r.serverId)?.name
+                ? settings.sonarr.find((s) => s.id === r.serverId)
                 : undefined;
+            const serverName = sonarrSettings?.name;
+            const versionName = r.isServiceRequest
+              ? sonarrSettings?.buttonLabel
+              : undefined;
 
             return {
               ...r,
@@ -254,6 +263,7 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 (profile) => profile.id === r.profileId
               )?.name,
               serverName,
+              versionName,
             };
           }
         }

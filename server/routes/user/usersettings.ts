@@ -12,6 +12,7 @@ import type {
 } from '@server/interfaces/api/userSettingsInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { setUserVersions } from '@server/lib/versions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { quickConnectSecret } from '@server/routes/auth';
@@ -775,16 +776,21 @@ userSettingsRoutes.post<
       }
       user.permissions = req.body.permissions;
 
-      if (req.body.requestServices !== undefined) {
-        if (!Array.isArray(req.body.requestServices)) {
-          return next({ status: 400, message: 'Invalid requestServices.' });
-        }
-        user.requestServices = req.body.requestServices.filter(
-          (s) => typeof s === 'string' && /^(radarr|sonarr):\d+$/.test(s)
-        );
+      if (
+        req.body.requestServices !== undefined &&
+        !Array.isArray(req.body.requestServices)
+      ) {
+        return next({ status: 400, message: 'Invalid requestServices.' });
       }
 
       await userRepository.save(user);
+
+      if (req.body.requestServices !== undefined) {
+        user.requestServices = await setUserVersions(
+          user.id,
+          req.body.requestServices
+        );
+      }
 
       return res.status(200).json({
         permissions: user.permissions,

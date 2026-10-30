@@ -70,10 +70,10 @@ const messages = defineMessages('components.Settings.SonarrModal', {
   externalUrl: 'External URL',
   enableSearch: 'Enable Automatic Search',
   animeOnly: 'Anime Only',
-  animeOnlyHelp: 'Only show this server’s request button for anime content.',
-  buttonLabel: 'Request Button Label',
+  animeOnlyHelp: 'Only offer this version for anime.',
+  buttonLabel: 'Version Name',
   buttonLabelHelp:
-    'Short label shown on the request button for this server (e.g. "ITA", "ENG"). Leave blank to hide the button.',
+    'Makes this server a version that users can request separately, for example "German" or "Kids". Leave blank if this server is not a version.',
   tagRequests: 'Tag Requests',
   tagRequestsInfo:
     "Automatically add an additional tag with the requester's user ID & display name",
@@ -1125,7 +1125,7 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                         type="text"
                         id="buttonLabel"
                         name="buttonLabel"
-                        placeholder="ITA"
+                        placeholder="German"
                       />
                     </div>
                   </div>

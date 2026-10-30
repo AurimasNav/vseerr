@@ -19,6 +19,7 @@ import WebhookAgent from '@server/lib/notifications/agents/webhook';
 import WebPushAgent from '@server/lib/notifications/agents/webpush';
 import checkOverseerrMerge from '@server/lib/overseerrMerge';
 import { getSettings } from '@server/lib/settings';
+import { prepareVersionDatabase } from '@server/lib/versionDatabase';
 import logger from '@server/logger';
 import clearCookies from '@server/middleware/clearcookies';
 import routes from '@server/routes';
@@ -81,6 +82,9 @@ app
         await dbConnection.query('PRAGMA foreign_keys=ON');
       }
     }
+
+    // VSeerr: repair version tables and restore parked version requests
+    await prepareVersionDatabase(dbConnection);
 
     // Load Settings
     const settings = await getSettings().load();

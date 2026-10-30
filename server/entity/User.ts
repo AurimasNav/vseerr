@@ -7,6 +7,7 @@ import PreparedEmail from '@server/lib/email';
 import type { PermissionCheckOptions } from '@server/lib/permissions';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { userVersionsSql, versionsFromDb } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import { AfterDate } from '@server/utils/dateHelpers';
@@ -24,6 +25,7 @@ import {
   PrimaryGeneratedColumn,
   RelationCount,
   UpdateDateColumn,
+  VirtualColumn,
 } from 'typeorm';
 import Issue from './Issue';
 import { MediaRequest } from './MediaRequest';
@@ -106,24 +108,13 @@ export class User {
   @Column({ type: 'integer', default: 0 })
   public permissions = 0;
 
-  @Column({
+  // Versions this user may request (`radarr:<id>` / `sonarr:<id>`). Stored
+  // in VSeerr's own table, so this property is read-only here: change it with
+  // setUserVersions() from server/lib/versions.ts.
+  @VirtualColumn({
     type: 'text',
-    nullable: true,
-    transformer: {
-      from: (value: string | null): string[] => {
-        if (!value) return [];
-        try {
-          const parsed = JSON.parse(value);
-          return Array.isArray(parsed) ? parsed : [];
-        } catch {
-          return [];
-        }
-      },
-      to: (value: string[] | null | undefined): string | null => {
-        if (!value || value.length === 0) return null;
-        return JSON.stringify(value);
-      },
-    },
+    query: userVersionsSql,
+    transformer: { from: versionsFromDb, to: (value) => value },
   })
   public requestServices: string[] = [];
 

@@ -23,6 +23,7 @@ import RequestButton from '@app/components/RequestButton';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import ServiceStatusBadges from '@app/components/StatusBadge/ServiceStatusBadges';
+import VersionsPanel from '@app/components/VersionsPanel';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
@@ -775,6 +776,13 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
           )}
         </div>
         <div className="media-overview-right">
+          <VersionsPanel
+            media={data.mediaInfo}
+            services={radarrServices}
+            isAnime={data.keywords.some(
+              (keyword) => keyword.id === ANIME_KEYWORD_ID
+            )}
+          />
           {data.collection && (
             <div className="mb-6">
               <Link href={`/collection/${data.collection.id}`}>

@@ -23,6 +23,7 @@ import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { setUserVersions } from '@server/lib/versions';
 import { checkUser } from '@server/middleware/auth';
 import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
 import { setupTestDb } from '@server/test/db';
@@ -1669,10 +1670,8 @@ describe('POST /request, per-service slots', () => {
   });
 
   async function grantServices(email: string, services: string[]) {
-    const userRepo = getRepository(User);
-    const user = await userRepo.findOneOrFail({ where: { email } });
-    user.requestServices = services;
-    await userRepo.save(user);
+    const user = await getRepository(User).findOneOrFail({ where: { email } });
+    await setUserVersions(user.id, services);
   }
 
   it('keeps service-specific requests in slots separate from the standard slot', async () => {
