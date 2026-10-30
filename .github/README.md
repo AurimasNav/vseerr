@@ -32,13 +32,13 @@ Everything else is Seerr as released upstream.
 - **Not sent upstream.** Seerr does not accept AI-driven contributions, and VSeerr respects that. Code from this repository is not proposed to Seerr.
 - **Seerr's documentation applies.** Setup, configuration and troubleshooting follow the [Seerr documentation](https://docs.seerr.dev). VSeerr documents only what it adds.
 
-If Seerr adds this feature itself, VSeerr will point users back to Seerr.
+Versions are VSeerr's main focus and will keep being developed here, even if Seerr adds something similar.
 
 ## Why not SeerrNG
 
 [SeerrNG](https://github.com/snapetech-org/seerrng) already supports requests across multiple Radarr and Sonarr instances, and it is a good option if you want its features. It is a broad fork that adds music, books, comics, magazines, games, ROMs and software, along with many other changes.
 
-VSeerr goes the other way. It changes as little as possible, so it can follow every Seerr release closely. If you only need versions, VSeerr stays close to Seerr. If you want more media types, use SeerrNG.
+VSeerr goes the other way. Outside of versions it changes as little as possible, so it can follow every Seerr release closely. If you only need versions, VSeerr stays close to Seerr. If you want more media types, use SeerrNG.
 
 ## Contributing
 
