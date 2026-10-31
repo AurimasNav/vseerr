@@ -223,6 +223,16 @@ components:
           nullable: true
           description: 'Enable watchlist sync for TV'
           example: false
+    DefaultVersions:
+      type: object
+      required:
+        - defaultVersions
+      properties:
+        defaultVersions:
+          type: array
+          items:
+            type: string
+            example: 'radarr:1'
     MainSettings:
       type: object
       properties:
@@ -2354,6 +2364,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MainSettings'
+  /settings/versions:
+    get:
+      summary: Get default versions
+      description: Returns the versions that new users may request by default. Each entry is `radarr:<id>` or `sonarr:<id>`. The `ADMIN` permission is required.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultVersions'
+    post:
+      summary: Update default versions
+      description: Replaces the versions that new users may request by default. Entries that do not match a configured version are dropped. The `ADMIN` permission is required.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefaultVersions'
+      responses:
+        '200':
+          description: The saved default versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultVersions'
+        '400':
+          description: '`defaultVersions` is not a list'
   /settings/jellyfin:
     get:
       summary: Get Jellyfin settings
