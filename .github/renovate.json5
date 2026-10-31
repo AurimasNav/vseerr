@@ -1,25 +1,59 @@
+// Renovate configuration for VSeerr.
+//
+// Seerr updates its own dependencies, and every Seerr release that VSeerr
+// merges brings those updates along. Routine version bumps made here would
+// conflict in package.json and pnpm-lock.yaml at every upstream merge, so:
+//
+//   - everything else (npm, Docker, Helm, Seerr's workflows) gets security
+//     fixes only;
+//   - VSeerr's own workflows get normal updates, including the tool versions
+//     marked with "# renovate:" comments.
+//
+// This file is listed in .github/vseerr-owned-files, so upstream changes to
+// Seerr's Renovate setup never replace it.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
-  extends: [
-    'config:recommended',
-    ':dependencyDashboard',
-    ':timezone(UTC)',
-    'group:allNonMajor',
-    'group:nextjsMonorepo',
-    'group:reactMonorepo',
-    'group:typescript-eslintMonorepo',
-    'group:tailwindcssMonorepo',
-    'github>seerr-team/seerr//.github/renovate/actions.json5',
-    'github>seerr-team/seerr//.github/renovate/docker.json5',
-    'github>seerr-team/seerr//.github/renovate/groups.json5',
-    'github>seerr-team/seerr//.github/renovate/helm.json5',
-    'github>seerr-team/seerr//.github/renovate/labels.json5',
-    'github>seerr-team/seerr//.github/renovate/pnpm.json5',
-    'github>seerr-team/seerr//.github/renovate/semanticCommits.json5',
-  ],
-  dependencyDashboardTitle: 'Renovate Dashboard 🤖',
-  suppressNotifications: ['prEditedNotification', 'prIgnoreNotification'],
-  rebaseWhen: 'conflicted',
+  extends: ['config:recommended', ':dependencyDashboard', ':timezone(Europe/Vilnius)'],
+  dependencyDashboardTitle: 'Renovate Dashboard',
+  dependencyDashboardOSVVulnerabilitySummary: 'unresolved',
   labels: ['dependencies'],
+  semanticCommits: 'enabled',
   minimumReleaseAge: '7 days',
+  rebaseWhen: 'conflicted',
+  suppressNotifications: ['prEditedNotification', 'prIgnoreNotification'],
+  // Security-fix PRs come from GitHub's Dependabot alerts (enabled on this
+  // repository) and from OSV. They override the rules below, skip schedules,
+  // and are raised without waiting for the release to age.
+  vulnerabilityAlerts: {
+    enabled: true,
+    labels: ['dependencies', 'security'],
+    minimumReleaseAge: null,
+  },
+  osvVulnerabilityAlerts: true,
+  customManagers: [
+    {
+      customType: 'regex',
+      description: 'Tool versions pinned in VSeerr workflow env blocks',
+      managerFilePatterns: ['/^\\.github/workflows/vseerr-.*\\.ya?ml$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+: [\'"]?(?<currentValue>[^\'"\\s]+)[\'"]?',
+      ],
+      extractVersionTemplate: '^v?(?<version>.*)$',
+    },
+  ],
+  packageRules: [
+    {
+      description: 'Dependencies follow Seerr releases; only security fixes are raised here',
+      matchPackageNames: ['*'],
+      enabled: false,
+    },
+    {
+      description: "VSeerr's own workflows and tools get regular updates, grouped weekly",
+      matchManagers: ['github-actions', 'custom.regex'],
+      matchFileNames: ['.github/workflows/vseerr-*.yml'],
+      enabled: true,
+      groupName: 'VSeerr workflow tools',
+      schedule: ['before 6am on monday'],
+    },
+  ],
 }
