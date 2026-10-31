@@ -1,0 +1,13 @@
+# Image version = the Seerr release VSeerr is based on + a VSeerr build number,
+# e.g. 3.5.1-vseerr.14: Seerr v3.5.1 plus 14 VSeerr commits on top of it.
+# The base comes from Seerr's release tags (vX.Y.Z), which the image workflow
+# fetches before running GitVersion. Merging a newer Seerr release moves the
+# base to that release; the build number keeps counting from the old one
+# (e.g. 3.5.2-vseerr.15), so it always goes up.
+workflow: GitHubFlow/v1
+tag-prefix: '[vV]?'
+branches:
+  main:
+    mode: ContinuousDelivery
+    label: vseerr
+    increment: None
