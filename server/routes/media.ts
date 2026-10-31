@@ -3,8 +3,10 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TautulliAPI from '@server/api/tautulli';
 import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
-import { getRepository } from '@server/datasource';
+import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import MediaServiceStatus from '@server/entity/MediaServiceStatus';
 import Season from '@server/entity/Season';
 import { User } from '@server/entity/User';
 import type {
@@ -13,6 +15,7 @@ import type {
 } from '@server/interfaces/api/mediaInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -213,32 +216,49 @@ mediaRoutes.delete(
 
       const is4k = String(req.query.is4k) === 'true';
       const isMovie = media.mediaType === MediaType.MOVIE;
+      const serviceIdParam = req.query.serviceId;
+      if (
+        serviceIdParam !== undefined &&
+        !/^\d+$/.test(String(serviceIdParam))
+      ) {
+        return next({ status: 400, message: 'Invalid serviceId.' });
+      }
+      const explicitServiceId =
+        serviceIdParam !== undefined ? Number(serviceIdParam) : undefined;
+      const isServiceDelete = explicitServiceId !== undefined;
 
       let serviceSettings;
-      if (isMovie) {
-        serviceSettings = settings.radarr.find(
-          (radarr) => radarr.isDefault && radarr.is4k === is4k
-        );
-      } else {
-        serviceSettings = settings.sonarr.find(
-          (sonarr) => sonarr.isDefault && sonarr.is4k === is4k
-        );
-      }
 
-      const specificServiceId = is4k ? media.serviceId4k : media.serviceId;
-      if (
-        specificServiceId &&
-        specificServiceId >= 0 &&
-        serviceSettings?.id !== specificServiceId
-      ) {
+      if (isServiceDelete) {
+        serviceSettings = isMovie
+          ? settings.radarr.find((r) => r.id === explicitServiceId)
+          : settings.sonarr.find((s) => s.id === explicitServiceId);
+      } else {
         if (isMovie) {
           serviceSettings = settings.radarr.find(
-            (radarr) => radarr.id === specificServiceId
+            (radarr) => radarr.isDefault && radarr.is4k === is4k
           );
         } else {
           serviceSettings = settings.sonarr.find(
-            (sonarr) => sonarr.id === specificServiceId
+            (sonarr) => sonarr.isDefault && sonarr.is4k === is4k
           );
+        }
+
+        const specificServiceId = is4k ? media.serviceId4k : media.serviceId;
+        if (
+          specificServiceId &&
+          specificServiceId >= 0 &&
+          serviceSettings?.id !== specificServiceId
+        ) {
+          if (isMovie) {
+            serviceSettings = settings.radarr.find(
+              (radarr) => radarr.id === specificServiceId
+            );
+          } else {
+            serviceSettings = settings.sonarr.find(
+              (sonarr) => sonarr.id === specificServiceId
+            );
+          }
         }
       }
 
@@ -281,14 +301,41 @@ mediaRoutes.delete(
         }
         await (service as SonarrAPI).removeSeries(tvdbId);
 
-        for (const season of media.seasons) {
-          season[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
+        if (!isServiceDelete) {
+          for (const season of media.seasons) {
+            season[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
+          }
         }
       }
 
-      media[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
-      media.resetServiceData(is4k);
-      await mediaRepository.save(media);
+      if (isServiceDelete) {
+        await dataSource.transaction(async (em) => {
+          await em
+            .getRepository(MediaServiceStatus)
+            .createQueryBuilder()
+            .delete()
+            .where('mediaId = :mediaId', { mediaId: media.id })
+            .andWhere('serviceId = :serviceId', {
+              serviceId: explicitServiceId,
+            })
+            .execute();
+
+          await em
+            .getRepository(MediaRequest)
+            .createQueryBuilder()
+            .delete()
+            .where('mediaId = :mediaId', { mediaId: media.id })
+            .andWhere('serverId = :serviceId', {
+              serviceId: explicitServiceId,
+            })
+            .andWhere(isVersionRequestSql('"media_request"'))
+            .execute();
+        });
+      } else {
+        media[is4k ? 'status4k' : 'status'] = MediaStatus.DELETED;
+        media.resetServiceData(is4k);
+        await mediaRepository.save(media);
+      }
 
       return res.status(204).send();
     } catch (e) {

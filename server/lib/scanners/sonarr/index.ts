@@ -30,11 +30,16 @@ class SonarrScanner
   extends BaseScanner<SonarrSeries>
   implements RunnableScanner<SyncStatus>
 {
+  protected declineRequestsOnStatusReset = true;
   private servers: SonarrSettings[];
   private currentServer: SonarrSettings;
   private sonarrApi: SonarrAPI;
   private scannedTvdbIds: Set<number> = new Set();
   private scanned4kTvdbIds: Set<number> = new Set();
+  private currentServerTmdbIds: Set<number> = new Set();
+  // Keyed on tmdbId: media.tvdbId can be null. Excludes unmonitored titles.
+  private processingTmdbIds: Set<number> = new Set();
+  private processing4kTmdbIds: Set<number> = new Set();
   private didScanStandard = false;
   private didScan4k = false;
   private serverReturnedEmpty = false;
@@ -54,11 +59,17 @@ class SonarrScanner
     };
   }
 
+  protected getConfiguredServers(): SonarrSettings[] {
+    return getSettings().sonarr;
+  }
+
   public async run(): Promise<void> {
     const settings = getSettings();
     const sessionId = this.startRun();
     this.scannedTvdbIds.clear();
     this.scanned4kTvdbIds.clear();
+    this.processingTmdbIds.clear();
+    this.processing4kTmdbIds.clear();
     this.didScanStandard = false;
     this.didScan4k = false;
     this.serverReturnedEmpty = false;
@@ -87,6 +98,7 @@ class SonarrScanner
           });
 
           this.items = await this.sonarrApi.getSeries();
+          this.currentServerTmdbIds = new Set();
 
           const server4k = this.enable4kShow && server.is4k;
           if (server4k) {
@@ -108,6 +120,16 @@ class SonarrScanner
           }
 
           await this.loop(this.processSonarrSeries.bind(this), { sessionId });
+          for (const serviceId of this.getServiceIds(server.id)) {
+            await this.resetStaleServiceStatus({
+              serviceId,
+              serviceType: 'sonarr',
+              mediaType: MediaType.TV,
+              seenTmdbIds: this.currentServerTmdbIds,
+              serverName: server.name,
+              clearSeasonStatuses: true,
+            });
+          }
         } else {
           this.log(`Sync not enabled. Skipping Sonarr server: ${server.name}`);
         }
@@ -138,6 +160,15 @@ class SonarrScanner
         this.didScan4k = false;
       }
 
+      await this.resolveStatusResets((media, is4k) => {
+        const scanComplete = is4k ? this.didScan4k : this.didScanStandard;
+        const processingIds = is4k
+          ? this.processing4kTmdbIds
+          : this.processingTmdbIds;
+
+        return scanComplete && !processingIds.has(media.tmdbId);
+      });
+
       await this.cleanupOrphanedShows();
       this.log('Sonarr scan complete', 'info');
     } catch (e) {
@@ -164,6 +195,10 @@ class SonarrScanner
         where: { tvdbId: sonarrSeries.tvdbId },
       });
 
+      if (media?.tmdbId) {
+        this.currentServerTmdbIds.add(media.tmdbId);
+      }
+
       if (!media || !media.tmdbId) {
         tvShow = await this.tmdb.getShowByTvdbIdForScan({
           tvdbId: sonarrSeries.tvdbId,
@@ -173,6 +208,8 @@ class SonarrScanner
       }
 
       const tmdbId = tvShow.id;
+      this.currentServerTmdbIds.add(tmdbId);
+
       const metadataProvider = tvShow.keywords.results.some(
         (keyword: TmdbKeyword) => keyword.id === ANIME_KEYWORD_ID
       )
@@ -219,6 +256,14 @@ class SonarrScanner
           processing: season.monitored && totalAvailableEpisodes === 0,
           is4kOverride: server4k,
         });
+      }
+
+      if (processableSeasons.some((season) => season.processing)) {
+        if (server4k) {
+          this.processing4kTmdbIds.add(tmdbId);
+        } else {
+          this.processingTmdbIds.add(tmdbId);
+        }
       }
 
       await this.processShow(tmdbId, sonarrSeries.tvdbId, processableSeasons, {

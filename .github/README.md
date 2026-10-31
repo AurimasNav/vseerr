@@ -6,7 +6,7 @@
 > **VSeerr is vibe coded.** Its changes are written with AI coding agents. AI-assisted contributions are welcome.
 
 > [!NOTE]
-> **Work in progress.** This repository currently holds an unmodified Seerr release plus the fork setup. Versions are not implemented yet, and there are no releases or images. For production use, run [Seerr](https://github.com/seerr-team/seerr).
+> **Work in progress.** Versions are being built on the `feat/versions` branch, and there are no releases or images yet. For production use, run [Seerr](https://github.com/seerr-team/seerr).
 
 ## What it adds
 
@@ -24,6 +24,10 @@ Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VS
 In Plex, add each version's media folder to the same library. Plex then shows the title once and lets viewers pick the version when playing.
 
 Everything else is Seerr as released upstream.
+
+## Switching from and back to Seerr
+
+VSeerr and Seerr can share one database. VSeerr keeps its data in tables of its own, so you can switch to VSeerr and back without exporting anything. Before going back to Seerr, run one command to set version requests aside; VSeerr restores them when it starts again. See [Switching between Seerr and VSeerr](../vseerr-docs/switching.md).
 
 ## How it relates to Seerr
 

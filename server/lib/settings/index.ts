@@ -84,6 +84,8 @@ export interface DVRSettings {
   preventSearch: boolean;
   tagRequests: boolean;
   overrideRule: number[];
+  buttonLabel?: string;
+  animeOnly?: boolean;
 }
 
 export interface RadarrSettings extends DVRSettings {
@@ -135,6 +137,8 @@ export interface MainSettings {
   applicationUrl: string;
   cacheImages: boolean;
   defaultPermissions: number;
+  // Versions (`radarr:<id>` / `sonarr:<id>`) new users can request.
+  defaultRequestServices?: string[];
   defaultQuotas: {
     movie: Quota;
     tv: Quota;
@@ -413,6 +417,7 @@ class Settings {
         applicationUrl: '',
         cacheImages: false,
         defaultPermissions: Permission.REQUEST,
+        defaultRequestServices: [],
         defaultQuotas: {
           movie: {},
           tv: {},

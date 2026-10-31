@@ -1,0 +1,71 @@
+# Checks that one database can move between Seerr and VSeerr in both
+# directions without losing requests, on SQLite and on Postgres.
+# See server/scripts/vseerrRoundTrip.ts and vseerr-docs/switching.md.
+name: 'VSeerr Database Round Trip'
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  roundtrip:
+    name: Round trip (${{ matrix.database }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+        env:
+          POSTGRES_USER: vseerr
+          POSTGRES_PASSWORD: vseerr
+          POSTGRES_DB: vseerr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vseerr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pnpm Setup
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: 'package.json'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        env:
+          CI: true
+        run: pnpm install --frozen-lockfile
+
+      - name: Round trip
+        env:
+          DB_TYPE: ${{ matrix.database == 'postgres' && 'postgres' || '' }}
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: vseerr
+          DB_PASS: vseerr
+          DB_NAME: vseerr
+        run: pnpm vseerr:roundtrip

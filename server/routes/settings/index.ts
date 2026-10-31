@@ -45,12 +45,14 @@ import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
+import versionSettingsRoutes from './versions';
 
 const settingsRoutes = Router();
 
 settingsRoutes.use('/notifications', notificationRoutes);
 settingsRoutes.use('/radarr', radarrRoutes);
 settingsRoutes.use('/sonarr', sonarrRoutes);
+settingsRoutes.use('/versions', versionSettingsRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 

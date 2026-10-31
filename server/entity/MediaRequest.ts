@@ -10,6 +10,7 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -27,19 +28,24 @@ import {
   Index,
   ManyToOne,
   OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
   RelationCount,
   UpdateDateColumn,
+  VirtualColumn,
 } from 'typeorm';
 import Media from './Media';
+import MediaServiceStatus from './MediaServiceStatus';
 import SeasonRequest from './SeasonRequest';
 import { User } from './User';
+import { VersionRequest } from './VSeerrVersions';
 
 export class RequestPermissionError extends Error {}
 export class QuotaRestrictedError extends Error {}
 export class DuplicateMediaRequestError extends Error {}
 export class NoSeasonsAvailableError extends Error {}
 export class BlocklistedMediaError extends Error {}
+export class InvalidServiceRequestError extends Error {}
 
 type MediaRequestOptions = {
   isAutoRequest?: boolean;
@@ -179,12 +185,57 @@ export class MediaRequest {
       relations: ['requests'],
     });
 
+    const isServiceSpecific =
+      !!requestBody.isServiceRequest &&
+      requestBody.serverId !== undefined &&
+      requestBody.serverId !== null &&
+      requestBody.serverId >= 0;
+
+    if (requestBody.isServiceRequest && !isServiceSpecific) {
+      throw new InvalidServiceRequestError(
+        'Service-specific requests must target a valid serverId.'
+      );
+    }
+
+    if (
+      isServiceSpecific &&
+      !(
+        requestBody.mediaType === MediaType.MOVIE
+          ? settings.radarr
+          : settings.sonarr
+      ).some((server) => server.id === requestBody.serverId)
+    ) {
+      throw new InvalidServiceRequestError(
+        'Service-specific requests must target a configured server.'
+      );
+    }
+
+    if (
+      isServiceSpecific &&
+      !user.hasPermission(Permission.MANAGE_REQUESTS) &&
+      !(user.requestServices ?? []).includes(
+        `${requestBody.mediaType === MediaType.MOVIE ? 'radarr' : 'sonarr'}:${
+          requestBody.serverId
+        }`
+      )
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to request in this service.'
+      );
+    }
+
     if (!media) {
       media = new Media({
         tmdbId: tmdbMedia.id,
         tvdbId: requestBody.tvdbId ?? tmdbMedia.external_ids.tvdb_id,
-        status: !requestBody.is4k ? MediaStatus.PENDING : MediaStatus.UNKNOWN,
-        status4k: requestBody.is4k ? MediaStatus.PENDING : MediaStatus.UNKNOWN,
+        status:
+          !requestBody.is4k && !isServiceSpecific
+            ? MediaStatus.PENDING
+            : MediaStatus.UNKNOWN,
+        status4k:
+          requestBody.is4k && !isServiceSpecific
+            ? MediaStatus.PENDING
+            : MediaStatus.UNKNOWN,
         mediaType: requestBody.mediaType,
       });
     } else {
@@ -199,6 +250,7 @@ export class MediaRequest {
       }
 
       if (
+        !isServiceSpecific &&
         (media.status === MediaStatus.UNKNOWN ||
           media.status === MediaStatus.DELETED) &&
         !requestBody.is4k
@@ -207,6 +259,7 @@ export class MediaRequest {
       }
 
       if (
+        !isServiceSpecific &&
         (media.status4k === MediaStatus.UNKNOWN ||
           media.status4k === MediaStatus.DELETED) &&
         requestBody.is4k
@@ -215,16 +268,30 @@ export class MediaRequest {
       }
     }
 
-    const existing = await requestRepository
+    const existingQuery = requestRepository
       .createQueryBuilder('request')
       .leftJoinAndSelect('request.media', 'media')
       .leftJoinAndSelect('request.requestedBy', 'user')
-      .where('request.is4k = :is4k', { is4k: requestBody.is4k })
-      .andWhere('media.tmdbId = :tmdbId', { tmdbId: tmdbMedia.id })
+      .where('media.tmdbId = :tmdbId', { tmdbId: tmdbMedia.id })
       .andWhere('media.mediaType = :mediaType', {
         mediaType: requestBody.mediaType,
-      })
-      .getMany();
+      });
+
+    if (isServiceSpecific) {
+      existingQuery
+        .andWhere(isVersionRequestSql('request'))
+        .andWhere('request.serverId = :serverId', {
+          serverId: requestBody.serverId,
+        });
+    } else {
+      existingQuery
+        .andWhere(`NOT ${isVersionRequestSql('request')}`)
+        .andWhere('request.is4k = :is4k', {
+          is4k: requestBody.is4k ?? false,
+        });
+    }
+
+    const existing = await existingQuery.getMany();
 
     if (existing && existing.length > 0) {
       // If there is an existing movie request that isn't declined, don't allow a new one.
@@ -343,6 +410,7 @@ export class MediaRequest {
           : undefined,
         is4k: requestBody.is4k,
         serverId: requestBody.serverId,
+        isServiceRequest: isServiceSpecific,
         profileId: profileId,
         rootFolder: rootFolder,
         tags: tags,
@@ -376,12 +444,17 @@ export class MediaRequest {
       // (Unless there are no seasons, in which case we abort)
       if (media.requests) {
         existingSeasons = media.requests
-          .filter(
-            (request) =>
-              request.is4k === requestBody.is4k &&
+          .filter((request) => {
+            const sameSlot = isServiceSpecific
+              ? request.isServiceRequest &&
+                request.serverId === requestBody.serverId
+              : !request.isServiceRequest && request.is4k === requestBody.is4k;
+            return (
+              sameSlot &&
               request.status !== MediaRequestStatus.DECLINED &&
               request.status !== MediaRequestStatus.COMPLETED
-          )
+            );
+          })
           .reduce((seasons, request) => {
             const combinedSeasons = request.seasons.map(
               (season) => season.seasonNumber
@@ -392,7 +465,25 @@ export class MediaRequest {
       }
 
       // We should also check seasons that are available/partially available but don't have existing requests
-      if (media.seasons) {
+      if (isServiceSpecific) {
+        if (media.id) {
+          const serviceStatus = await getRepository(MediaServiceStatus).findOne(
+            {
+              where: { mediaId: media.id, serviceId: requestBody.serverId },
+            }
+          );
+          existingSeasons = [
+            ...existingSeasons,
+            ...Object.entries(serviceStatus?.seasonStatuses ?? {})
+              .filter(
+                ([, status]) =>
+                  status !== MediaStatus.UNKNOWN &&
+                  status !== MediaStatus.DELETED
+              )
+              .map(([seasonNumber]) => Number(seasonNumber)),
+          ];
+        }
+      } else if (media.seasons) {
         existingSeasons = [
           ...existingSeasons,
           ...media.seasons
@@ -458,6 +549,7 @@ export class MediaRequest {
           : undefined,
         is4k: requestBody.is4k,
         serverId: requestBody.serverId,
+        isServiceRequest: isServiceSpecific,
         profileId: profileId,
         rootFolder: rootFolder,
         languageProfileId: requestBody.languageProfileId,
@@ -547,6 +639,20 @@ export class MediaRequest {
   @Column({ nullable: true })
   public serverId: number;
 
+  // Whether this is a version request. Stored in VSeerr's own table so
+  // Seerr's `media_request` table keeps Seerr's columns only.
+  @VirtualColumn({
+    type: 'boolean',
+    query: isVersionRequestSql,
+    transformer: { from: booleanFromDb, to: (value) => value },
+  })
+  public isServiceRequest: boolean;
+
+  @OneToOne(() => VersionRequest, (marker) => marker.request, {
+    cascade: ['insert'],
+  })
+  public versionMarker?: VersionRequest;
+
   @Column({ nullable: true })
   public profileId: number;
 
@@ -595,6 +701,9 @@ export class MediaRequest {
 
   constructor(init?: Partial<MediaRequest>) {
     Object.assign(this, init);
+    if (init?.isServiceRequest && !this.versionMarker) {
+      this.versionMarker = new VersionRequest();
+    }
   }
 
   @AfterInsert()

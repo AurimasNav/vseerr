@@ -8,6 +8,7 @@
 .github/PULL_REQUEST_TEMPLATE.md
 .github/ISSUE_TEMPLATE/config.yml
 .github/renovate.json5
+vseerr-docs/
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
 NOTICE.md
