@@ -293,21 +293,8 @@ const RequestButton = ({
   const applicableServices = getLabelledServices(allServices).filter(
     (service) => !service.animeOnly || isAnime
   );
-  const restrictToServices =
-    !hasPermission(Permission.MANAGE_REQUESTS) &&
-    (allServices
-      ? applicableServices.some((service) =>
-          (user?.requestServices ?? []).includes(
-            `${servicePrefix}:${service.id}`
-          )
-        )
-      : (user?.requestServices ?? []).some((service) =>
-          service.startsWith(`${servicePrefix}:`)
-        ));
-
   // Standard request button
   if (
-    !restrictToServices &&
     (!media ||
       media.status === MediaStatus.UNKNOWN ||
       (media.status === MediaStatus.DELETED && !activeRequest)) &&
@@ -331,7 +318,6 @@ const RequestButton = ({
       svg: <ArrowDownTrayIcon />,
     });
   } else if (
-    !restrictToServices &&
     mediaType === 'tv' &&
     (!activeRequest || activeRequest.requestedBy.id !== user?.id) &&
     hasPermission([Permission.REQUEST, Permission.REQUEST_TV], {
@@ -354,7 +340,6 @@ const RequestButton = ({
 
   // 4K request button
   if (
-    !restrictToServices &&
     (!media ||
       media.status4k === MediaStatus.UNKNOWN ||
       (media.status4k === MediaStatus.DELETED && !active4kRequest)) &&
@@ -380,7 +365,6 @@ const RequestButton = ({
       svg: <ArrowDownTrayIcon />,
     });
   } else if (
-    !restrictToServices &&
     mediaType === 'tv' &&
     (!active4kRequest || active4kRequest.requestedBy.id !== user?.id) &&
     hasPermission([Permission.REQUEST_4K, Permission.REQUEST_4K_TV], {
