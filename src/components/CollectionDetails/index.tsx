@@ -234,18 +234,7 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
   const collectionServices = getLabelledServices(radarrServices).filter(
     (service) => !service.animeOnly
   );
-  const restrictToServices =
-    !hasPermission(Permission.MANAGE_REQUESTS) &&
-    (radarrServices
-      ? collectionServices.some((service) =>
-          (user?.requestServices ?? []).includes(`radarr:${service.id}`)
-        )
-      : (user?.requestServices ?? []).some((service) =>
-          service.startsWith('radarr:')
-        ));
-
   const hasRequestable =
-    !restrictToServices &&
     canRequestMovies &&
     data.parts.filter(
       (part) =>
@@ -255,7 +244,6 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
     ).length > 0;
 
   const hasRequestable4k =
-    !restrictToServices &&
     settings.currentSettings.movie4kEnabled &&
     hasPermission([Permission.REQUEST_4K, Permission.REQUEST_4K_MOVIE], {
       type: 'or',
