@@ -1,5 +1,6 @@
 import Modal from '@app/components/Common/Modal';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import DefiningFormatsEditor from '@app/components/Settings/DefiningFormatsEditor';
 import RequestOptionsEditor from '@app/components/Settings/RequestOptionsEditor';
 import type { RadarrTestResponse } from '@app/components/Settings/SettingsServices';
 import useToasts from '@app/hooks/useToasts';
@@ -251,6 +252,8 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
           buttonLabel: radarr?.buttonLabel ?? '',
           animeOnly: radarr?.animeOnly ?? false,
           requestOptions: radarr?.requestOptions ?? [],
+          definingFormats: radarr?.definingFormats ?? [],
+          definingMatch: radarr?.definingMatch ?? 'all',
         }}
         validationSchema={RadarrSettingsSchema}
         onSubmit={async (values) => {
@@ -284,6 +287,8 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                     (o) => o.label.trim() && o.profileId > 0
                   )
                 : [],
+              definingFormats: values.is4k ? [] : values.definingFormats,
+              definingMatch: values.definingMatch,
             };
             if (!radarr) {
               await axios.post('/api/v1/settings/radarr', submission);
@@ -811,6 +816,23 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                     <Field type="checkbox" id="animeOnly" name="animeOnly" />
                   </div>
                 </div>
+                <DefiningFormatsEditor
+                  value={values.definingFormats}
+                  match={values.definingMatch}
+                  onChange={(value) => setFieldValue('definingFormats', value)}
+                  onMatchChange={(match) =>
+                    setFieldValue('definingMatch', match)
+                  }
+                  customFormats={testResponse.customFormats}
+                  suggestion={
+                    testResponse.definingSuggestions?.[
+                      Number(values.activeProfileId)
+                    ]
+                  }
+                  isValidated={isValidated}
+                  hasVersionName={!!values.buttonLabel?.trim()}
+                  is4k={values.is4k}
+                />
                 <RequestOptionsEditor
                   value={values.requestOptions}
                   onChange={(value) => setFieldValue('requestOptions', value)}

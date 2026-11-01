@@ -205,3 +205,52 @@ describe('version request options', () => {
     assert.deepStrictEqual(standard.options, []);
   });
 });
+
+describe('version coverage', () => {
+  const coverage = [
+    { key: 'standard', definingFormats: [], definingMatch: 'all' as const },
+    {
+      key: 'radarr:1',
+      label: 'Russian',
+      definingFormats: ['Russian audio'],
+      definingMatch: 'all' as const,
+      coveredBy: { key: 'standard' },
+    },
+    {
+      key: 'radarr:2',
+      label: 'Lithuanian',
+      definingFormats: ['Lithuanian audio'],
+      definingMatch: 'all' as const,
+      requestedVia: {
+        key: 'radarr:1',
+        label: 'Russian',
+        until: '2026-11-03T00:00:00.000Z',
+      },
+    },
+  ];
+
+  it('closes covered and held versions to regular users', () => {
+    const result = choices([], { coverage });
+    assert.deepStrictEqual(
+      result.map((c) => [c.key, c.requestable, c.coveredBy, c.requestedVia]),
+      [
+        ['standard', true, undefined, undefined],
+        ['radarr:1', false, null, undefined],
+        ['radarr:2', false, undefined, 'Russian'],
+      ]
+    );
+  });
+
+  it('keeps them open to request managers', () => {
+    const result = choices([], { coverage, isManager: true });
+    assert.deepStrictEqual(
+      result.map((c) => c.requestable),
+      [true, true, true]
+    );
+  });
+
+  it('ignores coverage for shows (seasons decide)', () => {
+    const result = choices([], { coverage, mediaType: 'tv' });
+    assert.ok(result.every((c) => c.coveredBy === undefined));
+  });
+});

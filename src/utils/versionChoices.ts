@@ -3,6 +3,7 @@ import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
 import type { PublicRequestOption } from '@server/lib/requestOptions';
 import { otherVersionHasTitle } from '@server/lib/requestOptions';
+import type { VersionCoverageResult } from '@server/lib/versionCoverage';
 import {
   getLabelledServices,
   getMediaServiceStatus,
@@ -36,6 +37,10 @@ export interface VersionChoice {
    * marked "only if no other version has the title" do not apply.
    */
   otherVersionHasTitle: boolean;
+  /** Movie: another version's file covers this one (its name, or null for standard). */
+  coveredBy?: string | null;
+  /** Movie: another version was just requested and may cover this one. */
+  requestedVia?: string | null;
 }
 
 export const versionKey = (
@@ -95,6 +100,7 @@ export const getVersionChoices = ({
   grants,
   isManager,
   standardRequestable,
+  coverage = [],
 }: {
   mediaType: 'movie' | 'tv';
   media?: Pick<Media, 'status' | 'requests' | 'serviceStatuses'>;
@@ -107,11 +113,33 @@ export const getVersionChoices = ({
   isManager: boolean;
   /** Overrides the status check for the standard version. */
   standardRequestable?: boolean;
+  /** Coverage per version from `/api/v1/media/:id/versions`. */
+  coverage?: VersionCoverageResult[];
 }): VersionChoice[] => {
   const held = heldVersions(media, userId, mediaType);
   const closedByOtherVersion = (key: VersionKey) =>
     !isManager && held.size > 0 && !held.has(key);
   const blocklisted = media?.status === MediaStatus.BLOCKLISTED;
+  // Coverage closes a version to users without Manage Requests (movies; for
+  // shows it applies per season in the season list).
+  const coverageOf = (key: VersionKey) => {
+    const result = coverage.find((c) => c.key === key);
+    if (mediaType !== 'movie' || !result) {
+      return {};
+    }
+    return {
+      ...(result.coveredBy
+        ? { coveredBy: result.coveredBy.label ?? null }
+        : {}),
+      ...(result.requestedVia
+        ? { requestedVia: result.requestedVia.label ?? null }
+        : {}),
+    };
+  };
+  const closedByCoverage = (key: VersionKey) => {
+    const c = coverageOf(key);
+    return !isManager && ('coveredBy' in c || 'requestedVia' in c);
+  };
 
   const standardStatus = media?.status ?? MediaStatus.UNKNOWN;
   const standardServers = (services ?? []).filter((s) => !s.is4k);
@@ -134,10 +162,12 @@ export const getVersionChoices = ({
       requestable:
         !blocklisted &&
         (standardRequestable ?? isOpenStatus(mediaType, standardStatus)) &&
-        !closedByOtherVersion(STANDARD_VERSION),
+        !closedByOtherVersion(STANDARD_VERSION) &&
+        !closedByCoverage(STANDARD_VERSION),
       otherVersionHeld: closedByOtherVersion(STANDARD_VERSION),
       options: [],
       otherVersionHasTitle: false,
+      ...coverageOf(STANDARD_VERSION),
     },
   ];
 
@@ -158,10 +188,12 @@ export const getVersionChoices = ({
       requestable:
         !blocklisted &&
         isOpenStatus(mediaType, status) &&
-        !closedByOtherVersion(key),
+        !closedByOtherVersion(key) &&
+        !closedByCoverage(key),
       otherVersionHeld: closedByOtherVersion(key),
       options: service.requestOptions ?? [],
       otherVersionHasTitle: hasTitleElsewhere(service.id),
+      ...coverageOf(key),
     });
   }
 

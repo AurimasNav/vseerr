@@ -11,6 +11,7 @@ import {
 } from '@app/utils/versionChoices';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
+import type { MediaVersionsResponse } from '@server/lib/mediaVersions';
 import { useState } from 'react';
 import useSWR from 'swr';
 
@@ -27,7 +28,7 @@ const useVersionChoice = ({
   onChange,
 }: {
   mediaType: 'movie' | 'tv';
-  media?: Pick<Media, 'status' | 'requests' | 'serviceStatuses'>;
+  media?: Pick<Media, 'id' | 'status' | 'requests' | 'serviceStatuses'>;
   isAnime?: boolean;
   /** Off when editing a request or when the version is already fixed. */
   enabled: boolean;
@@ -41,6 +42,10 @@ const useVersionChoice = ({
         ? '/api/v1/service/radarr'
         : '/api/v1/service/sonarr'
       : null
+  );
+  // Coverage between versions; only titles Seerr already tracks have it.
+  const { data: mediaVersions } = useSWR<MediaVersionsResponse>(
+    enabled && media?.id ? `/api/v1/media/${media.id}/versions` : null
   );
   const [picked, setPicked] = useState<VersionKey | null>(null);
   const [useByDefaultChoice, setUseByDefaultChoice] = useState<boolean | null>(
@@ -60,6 +65,7 @@ const useVersionChoice = ({
         userId: user?.id,
         grants: user?.requestServices ?? [],
         isManager: hasPermission(Permission.MANAGE_REQUESTS),
+        coverage: mediaVersions?.versions.map((v) => v.coverage),
       })
     : [];
   const remembered = getRememberedVersion(user?.id, mediaType);
@@ -78,6 +84,8 @@ const useVersionChoice = ({
   const option = choice?.options.find((o) => o.id === optionId);
 
   return {
+    /** Coverage per version (shows use it per season). */
+    coverage: mediaVersions?.versions.map((v) => v.coverage) ?? [],
     /** Services are still loading, so the choices are not known yet. */
     loading: enabled && !services,
     showPicker,

@@ -1155,6 +1155,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         </div>
         <div className="media-overview-right">
           <VersionsPanel
+            mediaType="tv"
             media={data.mediaInfo}
             services={sonarrServices}
             isAnime={data.keywords.some(

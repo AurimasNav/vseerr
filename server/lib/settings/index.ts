@@ -88,6 +88,10 @@ export interface DVRSettings {
   animeOnly?: boolean;
   /** VSeerr: extra choices shown under this version in the request dialog. */
   requestOptions?: RequestOption[];
+  /** VSeerr: custom format names that make a file count as this version. */
+  definingFormats?: string[];
+  /** VSeerr: whether a file needs all defining formats or any one. */
+  definingMatch?: 'all' | 'any';
 }
 
 /**

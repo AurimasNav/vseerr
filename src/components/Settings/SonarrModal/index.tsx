@@ -1,5 +1,6 @@
 import Modal from '@app/components/Common/Modal';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import DefiningFormatsEditor from '@app/components/Settings/DefiningFormatsEditor';
 import RequestOptionsEditor from '@app/components/Settings/RequestOptionsEditor';
 import type { SonarrTestResponse } from '@app/components/Settings/SettingsServices';
 import useToasts from '@app/hooks/useToasts';
@@ -270,6 +271,8 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
           buttonLabel: sonarr?.buttonLabel ?? '',
           animeOnly: sonarr?.animeOnly ?? false,
           requestOptions: sonarr?.requestOptions ?? [],
+          definingFormats: sonarr?.definingFormats ?? [],
+          definingMatch: sonarr?.definingMatch ?? 'all',
           monitorNewItems: sonarr?.monitorNewItems ?? 'all',
         }}
         validationSchema={SonarrSettingsSchema}
@@ -321,6 +324,8 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                     (o) => o.label.trim() && o.profileId > 0
                   )
                 : [],
+              definingFormats: values.is4k ? [] : values.definingFormats,
+              definingMatch: values.definingMatch,
               monitorNewItems: values.monitorNewItems,
             };
             if (!sonarr) {
@@ -1148,6 +1153,23 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                     <Field type="checkbox" id="animeOnly" name="animeOnly" />
                   </div>
                 </div>
+                <DefiningFormatsEditor
+                  value={values.definingFormats}
+                  match={values.definingMatch}
+                  onChange={(value) => setFieldValue('definingFormats', value)}
+                  onMatchChange={(match) =>
+                    setFieldValue('definingMatch', match)
+                  }
+                  customFormats={testResponse.customFormats}
+                  suggestion={
+                    testResponse.definingSuggestions?.[
+                      Number(values.activeProfileId)
+                    ]
+                  }
+                  isValidated={isValidated}
+                  hasVersionName={!!values.buttonLabel?.trim()}
+                  is4k={values.is4k}
+                />
                 <RequestOptionsEditor
                   value={values.requestOptions}
                   onChange={(value) => setFieldValue('requestOptions', value)}

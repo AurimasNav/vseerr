@@ -661,6 +661,17 @@ components:
           description: VSeerr. Extra choices shown under this version in the request dialog; a ticked option requests with its quality profile.
           items:
             $ref: '#/components/schemas/RequestOption'
+        definingFormats:
+          type: array
+          description: VSeerr. Custom format names that make a file count as this version. Another version's file that has them covers this version.
+          items:
+            type: string
+          example: ['Russian audio']
+        definingMatch:
+          type: string
+          enum: [all, any]
+          description: VSeerr. Whether a file needs all defining formats or any one of them.
+          example: all
       required:
         - name
         - hostname
@@ -754,6 +765,17 @@ components:
           description: VSeerr. Extra choices shown under this version in the request dialog; a ticked option requests with its quality profile.
           items:
             $ref: '#/components/schemas/RequestOption'
+        definingFormats:
+          type: array
+          description: VSeerr. Custom format names that make a file count as this version. Another version's file that has them covers this version.
+          items:
+            type: string
+          example: ['Russian audio']
+        definingMatch:
+          type: string
+          enum: [all, any]
+          description: VSeerr. Whether a file needs all defining formats or any one of them.
+          example: all
       required:
         - name
         - hostname
@@ -7563,6 +7585,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MediaInfo'
+  /media/{mediaId}/versions:
+    get:
+      summary: Get the versions of a media item
+      description: VSeerr. For each version, what its files contain (resolution, matched custom formats with a positive score, audio languages) and whether another version covers it. Available to every signed-in user.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Versions of the media item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: string
+                          example: radarr:1
+                        label:
+                          type: string
+                          example: German
+                        serverId:
+                          type: number
+                          example: 1
+                        summary:
+                          type: object
+                        seasonSummaries:
+                          type: object
+                        coverage:
+                          type: object
+        '404':
+          description: Media item does not exist
   /media/{mediaId}/watch_data:
     get:
       summary: Get watch data

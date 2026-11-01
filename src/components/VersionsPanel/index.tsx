@@ -1,16 +1,20 @@
 import CachedImage from '@app/components/Common/CachedImage';
 import { getStatusLabel } from '@app/components/StatusBadge';
+import VersionFileDetails from '@app/components/VersionsPanel/VersionFileDetails';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { getLabelledServices } from '@app/utils/serviceRequestStatus';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
+import type { MediaVersionsResponse } from '@server/lib/mediaVersions';
 import Link from 'next/link';
 import { FormattedRelativeTime, useIntl } from 'react-intl';
+import useSWR from 'swr';
 
 const messages = defineMessages('components.VersionsPanel', {
   versions: 'Versions',
+  standard: 'Standard',
   notrequested: 'Not requested',
   requestedby: 'Requested by {user}',
   requestedbymany:
@@ -27,19 +31,34 @@ interface VersionsPanelProps {
   media?: Media;
   services?: ServiceCommonServer[];
   isAnime?: boolean;
+  mediaType?: 'movie' | 'tv';
 }
 
 /**
  * Lists every version of a title on its details page: whether it is
  * requested or available, and who requested it.
  */
-const VersionsPanel = ({ media, services, isAnime }: VersionsPanelProps) => {
+const VersionsPanel = ({
+  media,
+  services,
+  isAnime,
+  mediaType = 'movie',
+}: VersionsPanelProps) => {
   const intl = useIntl();
   const { user } = useUser();
 
   const versions = getLabelledServices(services).filter(
     (service) => !service.animeOnly || isAnime
   );
+  // File details and coverage, read from Radarr/Sonarr by the server.
+  const { data: fileDetails } = useSWR<MediaVersionsResponse>(
+    versions.length > 0 && media?.id
+      ? `/api/v1/media/${media.id}/versions`
+      : null
+  );
+  const detailsFor = (key: string) =>
+    fileDetails?.versions.find((v) => v.key === key);
+  const standardDetails = detailsFor('standard');
 
   if (versions.length === 0) {
     return null;
@@ -79,6 +98,17 @@ const VersionsPanel = ({ media, services, isAnime }: VersionsPanelProps) => {
       <div className="media-fact">
         <span>{intl.formatMessage(messages.versions)}</span>
       </div>
+      {(standardDetails?.summary ||
+        standardDetails?.coverage.coveredBy ||
+        standardDetails?.coverage.requestedVia ||
+        standardDetails?.coverage.seasons) && (
+        <div className="media-fact flex-col items-stretch">
+          <div className="flex justify-between">
+            <span>{intl.formatMessage(messages.standard)}</span>
+          </div>
+          <VersionFileDetails details={standardDetails} />
+        </div>
+      )}
       {rows.map(({ version, status, requests }) => {
         const firstRequest = requests[0];
         const isRequested =
@@ -97,6 +127,11 @@ const VersionsPanel = ({ media, services, isAnime }: VersionsPanelProps) => {
                   : intl.formatMessage(messages.notrequested)}
               </span>
             </div>
+            <VersionFileDetails
+              details={detailsFor(
+                `${mediaType === 'tv' ? 'sonarr' : 'radarr'}:${version.id}`
+              )}
+            />
             {firstRequest?.requestedBy && (
               <div className="mt-1 flex items-center justify-end text-xs font-normal text-gray-400">
                 {intl.formatMessage(

@@ -6,6 +6,7 @@ import {
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
+import { coverageBlock } from '@server/lib/mediaVersions';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
@@ -49,6 +50,8 @@ import { VersionRequest } from './VSeerrVersions';
 export class RequestPermissionError extends Error {}
 export class QuotaRestrictedError extends Error {}
 export class DuplicateMediaRequestError extends Error {}
+/** VSeerr: another version already covers the requested version. */
+export class CoveredByVersionError extends Error {}
 export class NoSeasonsAvailableError extends Error {}
 export class BlocklistedMediaError extends Error {}
 export class InvalidServiceRequestError extends Error {}
@@ -290,6 +293,29 @@ export class MediaRequest {
       throw new DuplicateMediaRequestError(
         'You already requested another version of this title.'
       );
+    }
+
+    // VSeerr: a version another version's file covers (or may cover, while
+    // that request is under a day old) is for request managers only.
+    // Covered seasons of a show are dropped from the request, the same way
+    // Seerr drops seasons that are already requested.
+    let coveredSeasons: number[] = [];
+    if (
+      media.id &&
+      !requestBody.is4k &&
+      !user.hasPermission(Permission.MANAGE_REQUESTS)
+    ) {
+      const block = await coverageBlock({
+        media,
+        serverId: isServiceSpecific
+          ? (requestBody.serverId ?? undefined)
+          : undefined,
+        isServiceRequest: isServiceSpecific,
+      });
+      if (block && requestBody.mediaType === MediaType.MOVIE) {
+        throw new CoveredByVersionError(block.message);
+      }
+      coveredSeasons = block?.seasons ?? [];
     }
 
     const existingQuery = requestRepository
@@ -570,10 +596,17 @@ export class MediaRequest {
       }
 
       const finalSeasons = requestedSeasons.filter(
-        (rs) => !existingSeasons.includes(rs)
+        (rs) => !existingSeasons.includes(rs) && !coveredSeasons.includes(rs)
       );
 
-      if (finalSeasons.length === 0) {
+      if (
+        finalSeasons.length === 0 &&
+        requestedSeasons.some((rs) => coveredSeasons.includes(rs))
+      ) {
+        throw new CoveredByVersionError(
+          'These seasons are already covered by another version.'
+        );
+      } else if (finalSeasons.length === 0) {
         throw new NoSeasonsAvailableError('No seasons available to request');
       } else if (
         !ignoreQuota &&
