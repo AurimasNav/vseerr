@@ -6,7 +6,7 @@
 > **VSeerr is vibe coded.** Its changes are written with AI coding agents. AI-assisted contributions are welcome.
 
 > [!NOTE]
-> **Early stage.** VSeerr is young and has few users so far. Back up before you switch, as described in [Switching between Seerr and VSeerr](../vseerr-docs/switching.md).
+> **Early stage.** VSeerr is young and has few users so far. It is provided as is, without warranty of any kind (see [LICENSE](../LICENSE)). Back up before you switch, as described in [Switching between Seerr and VSeerr](../vseerr-docs/switching.md).
 
 ## What it adds
 
