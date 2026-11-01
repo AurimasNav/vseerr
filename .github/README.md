@@ -6,7 +6,7 @@
 > **VSeerr is vibe coded.** Its changes are written with AI coding agents. AI-assisted contributions are welcome.
 
 > [!NOTE]
-> **Work in progress.** Versions are being built on the `feat/versions` branch, and there are no releases or images yet. For production use, run [Seerr](https://github.com/seerr-team/seerr).
+> **Early stage.** VSeerr is young and has few users so far. It is provided as is, without warranty of any kind (see [LICENSE](../LICENSE)). Back up before you switch, as described in [Switching between Seerr and VSeerr](../vseerr-docs/switching.md).
 
 ## What it adds
 
@@ -18,12 +18,20 @@ VSeerr adds versions:
 - When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the default on each device.
 - Each version tracks its own requests and availability, so a title can exist once per version.
 - Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
+- A version can offer extra request options, each tied to one of its quality profiles. For example, a German version can offer "English is fine until a German dub appears".
+- Request notifications name the version, for example "Movie Request Approved in German".
 
 Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VSeerr. A "German" version is a Radarr instance whose profiles prefer German audio. Its profiles can still differ, for example one with a 720p cutoff and one with a 1080p cutoff.
 
 In Plex, add each version's media folder to the same library. Plex then shows the title once and lets viewers pick the version when playing.
 
 Everything else is Seerr as released upstream.
+
+## Installing
+
+Images are published to the GitHub Container Registry as `ghcr.io/aurimasnav/vseerr`, tagged `<Seerr version>-vseerr.<build>`, for example `3.5.1-vseerr.18`. The `main` tag follows the latest build. Images are built for amd64 only.
+
+VSeerr is set up like Seerr: use the same container settings, volumes and environment variables, with the VSeerr image in place of Seerr's.
 
 ## Switching from and back to Seerr
 
