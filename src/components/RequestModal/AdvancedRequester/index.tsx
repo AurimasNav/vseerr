@@ -73,6 +73,8 @@ interface AdvancedRequesterProps {
   requestUser?: User;
   requestId?: number;
   serverFixed?: boolean;
+  /** VSeerr: profile of the ticked request option; shown as the selection. */
+  optionProfileId?: number;
   quota?: { movie: { limit?: number }; tv: { limit?: number } };
   onChange: (overrides: RequestOverrides) => void;
 }
@@ -86,6 +88,7 @@ const AdvancedRequester = ({
   requestUser,
   requestId,
   serverFixed = false,
+  optionProfileId,
   quota,
   onChange,
 }: AdvancedRequesterProps) => {
@@ -128,6 +131,12 @@ const AdvancedRequester = ({
   const [selectedProfile, setSelectedProfile] = useState<number>(
     defaultOverrides?.profile ?? -1
   );
+  // VSeerr: a ticked request option selects its quality profile here, so the
+  // dropdown shows what will be requested. Unticking restores the profile
+  // the server or an override rule chose; picking a profile by hand after
+  // ticking still wins, because the dropdown value is what gets sent.
+  const optionProfileRef = useRef<number | undefined>(optionProfileId);
+  const baseProfileRef = useRef<number | undefined>(undefined);
   const [selectedFolder, setSelectedFolder] = useState<string>(
     defaultOverrides?.folder ?? ''
   );
@@ -261,10 +270,15 @@ const AdvancedRequester = ({
 
       if (
         defaultProfile &&
-        defaultProfile.id !== selectedProfile &&
         (!applyOverrides || defaultOverrides.profile === null)
       ) {
-        setSelectedProfile(defaultProfile.id);
+        baseProfileRef.current = defaultProfile.id;
+        if (
+          defaultProfile.id !== selectedProfile &&
+          optionProfileRef.current === undefined
+        ) {
+          setSelectedProfile(defaultProfile.id);
+        }
       }
 
       if (
@@ -337,6 +351,21 @@ const AdvancedRequester = ({
   }, [isIgnoreQuotaVisible, selectedUserId]);
 
   useEffect(() => {
+    const previous = optionProfileRef.current;
+    optionProfileRef.current = optionProfileId;
+    if (!serverData) {
+      return;
+    }
+    if (optionProfileId !== undefined) {
+      if (serverData.profiles.some((p) => p.id === optionProfileId)) {
+        setSelectedProfile(optionProfileId);
+      }
+    } else if (previous !== undefined) {
+      setSelectedProfile(baseProfileRef.current ?? -1);
+    }
+  }, [optionProfileId, serverData]);
+
+  useEffect(() => {
     if (selectedServer !== null || selectedUser) {
       onChange({
         folder: selectedFolder !== '' ? selectedFolder : undefined,
@@ -384,7 +413,10 @@ const AdvancedRequester = ({
             setSelectedFolder(override.rootFolder);
           }
           if (!defaultOverrides?.profile && override.profileId) {
-            setSelectedProfile(override.profileId);
+            baseProfileRef.current = override.profileId;
+            if (optionProfileRef.current === undefined) {
+              setSelectedProfile(override.profileId);
+            }
           }
           if (
             !defaultOverrides?.tags &&

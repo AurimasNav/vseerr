@@ -8,8 +8,9 @@ import logger from '@server/logger';
 
 // VSeerr: the version name shown in request notifications, e.g. the event
 // "Movie Request Automatically Approved in German". Once a server has
-// versions, a standard request is named too: "in Standard", plus its quality
-// profile when that is not the server's default, e.g.
+// versions, a standard request is named too ("in Standard"). Either way the
+// quality profile is added when the request used one other than the server's
+// default, e.g. "in German (German or English)" for a request option or
 // "in Standard (Anime dub-only)". Setups without versions keep Seerr's
 // wording.
 
@@ -80,8 +81,13 @@ export const standardLabelFrom = (
     return undefined;
   }
   const { customProfile } = standardTarget(request, servers);
+  return customProfile ? withProfile('Standard', profileName) : 'Standard';
+};
+
+/** "German (German or English)", or just the label without a profile name. */
+export const withProfile = (label: string, profileName?: string): string => {
   const name = profileName?.trim();
-  return customProfile && name ? `Standard (${name})` : 'Standard';
+  return name ? `${label} (${name})` : label;
 };
 
 const profileNameOf = async (
@@ -116,7 +122,20 @@ export const requestNotificationLabel = async (
 ): Promise<string | undefined> => {
   const servers = serversFor(request.type);
   if (request.isServiceRequest) {
-    return versionLabelFrom(request, servers);
+    const version = versionLabelFrom(request, servers);
+    const server = servers.find((s) => s.id === request.serverId);
+    if (
+      !version ||
+      !server ||
+      !request.profileId ||
+      request.profileId === server.activeProfileId
+    ) {
+      return version;
+    }
+    return withProfile(
+      version,
+      await profileNameOf(server, request.type, request.profileId)
+    );
   }
   if (!hasVersions(servers)) {
     return undefined;
