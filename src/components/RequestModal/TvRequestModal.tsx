@@ -233,7 +233,13 @@ const TvRequestModal = ({
         mediaType: 'tv',
         is4k,
         ...(requestServerId != null
-          ? { serverId: requestServerId, isServiceRequest: true }
+          ? {
+              serverId: requestServerId,
+              isServiceRequest: true,
+              ...(version.requestOption
+                ? { requestOption: version.requestOption }
+                : {}),
+            }
           : {}),
         ignoreQuota: requestOverrides?.ignoreQuota,
         seasons: settings.currentSettings.partialRequestsEnabled

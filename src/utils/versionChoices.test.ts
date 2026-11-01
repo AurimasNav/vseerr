@@ -7,6 +7,7 @@ import {
   getVersionChoices,
   holdsOtherVersion,
   initialVersionChoice,
+  optionApplies,
 } from './versionChoices';
 
 const services = [
@@ -138,5 +139,69 @@ describe('holdsOtherVersion', () => {
     assert.strictEqual(holdsOtherVersion(m, 7, 'movie', 2), true);
     assert.strictEqual(holdsOtherVersion(m, 7, 'movie'), true);
     assert.strictEqual(holdsOtherVersion(m, 8, 'movie'), false);
+  });
+});
+
+describe('version request options', () => {
+  const option = {
+    id: 'english-until-dubbed',
+    label: 'English is OK until a dub appears',
+    onlyIfNoOtherVersion: true,
+  };
+  const withOptions = services.map((s) =>
+    s.id === 2 ? { ...s, requestOptions: [option] } : s
+  ) as ServiceCommonServer[];
+  const optionChoice = (
+    serviceStatuses: { serviceId: number; status: MediaStatus }[]
+  ) =>
+    getVersionChoices({
+      mediaType: 'movie',
+      media: {
+        status: MediaStatus.UNKNOWN,
+        requests: [],
+        serviceStatuses,
+      } as unknown as Media,
+      services: withOptions,
+      userId: 7,
+      grants: ['radarr:1', 'radarr:2'],
+      isManager: false,
+    }).find((c) => c.key === 'radarr:2')!;
+
+  it('lists the version’s options and applies them on a new title', () => {
+    const choice = optionChoice([]);
+    assert.deepStrictEqual(choice.options, [option]);
+    assert.strictEqual(choice.otherVersionHasTitle, false);
+    assert.strictEqual(optionApplies(choice, option), true);
+  });
+
+  it('skips a conditional option once the standard version has the title', () => {
+    const choice = optionChoice([
+      { serviceId: 0, status: MediaStatus.AVAILABLE },
+    ]);
+    assert.strictEqual(choice.otherVersionHasTitle, true);
+    assert.strictEqual(optionApplies(choice, option), false);
+    assert.strictEqual(
+      optionApplies(choice, { ...option, onlyIfNoOtherVersion: false }),
+      true
+    );
+  });
+
+  it('skips a conditional option while another version downloads it', () => {
+    const choice = optionChoice([
+      { serviceId: 1, status: MediaStatus.PROCESSING },
+    ]);
+    assert.strictEqual(optionApplies(choice, option), false);
+  });
+
+  it('gives the standard version no options', () => {
+    const standard = getVersionChoices({
+      mediaType: 'movie',
+      media: media([]),
+      services: withOptions,
+      userId: 7,
+      grants: ['radarr:2'],
+      isManager: false,
+    })[0];
+    assert.deepStrictEqual(standard.options, []);
   });
 });

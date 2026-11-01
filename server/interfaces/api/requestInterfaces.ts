@@ -30,4 +30,6 @@ export type MediaRequestBody = {
   userId?: number;
   tags?: number[];
   ignoreQuota?: boolean;
+  /** VSeerr: id of one of the chosen version's request options. */
+  requestOption?: string;
 };

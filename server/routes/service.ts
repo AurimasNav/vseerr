@@ -5,6 +5,7 @@ import type {
   ServiceCommonServer,
   ServiceCommonServerWithDetails,
 } from '@server/interfaces/api/serviceInterfaces';
+import { publicRequestOptions } from '@server/lib/requestOptions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
@@ -25,6 +26,7 @@ serviceRoutes.get('/radarr', async (req, res) => {
       activeTags: radarr.tags ?? [],
       buttonLabel: radarr.buttonLabel,
       animeOnly: radarr.animeOnly,
+      requestOptions: publicRequestOptions(radarr.requestOptions),
     })
   );
 
@@ -99,6 +101,7 @@ serviceRoutes.get('/sonarr', async (req, res) => {
       activeTags: [],
       buttonLabel: sonarr.buttonLabel,
       animeOnly: sonarr.animeOnly,
+      requestOptions: publicRequestOptions(sonarr.requestOptions),
     })
   );
 

@@ -1,4 +1,5 @@
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { sanitizeRequestOptions } from '@server/lib/requestOptions';
 import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -17,6 +18,7 @@ sonarrRoutes.post('/', async (req, res) => {
   const settings = getSettings();
 
   const newSonarr = req.body as SonarrSettings;
+  newSonarr.requestOptions = sanitizeRequestOptions(newSonarr.requestOptions);
   const lastItem = settings.sonarr[settings.sonarr.length - 1];
   newSonarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -101,6 +103,7 @@ sonarrRoutes.put<{ id: string }>('/:id', async (req, res) => {
   settings.sonarr[sonarrIndex] = {
     ...req.body,
     id: Number(req.params.id),
+    requestOptions: sanitizeRequestOptions(req.body.requestOptions),
   } as SonarrSettings;
   await settings.save();
 

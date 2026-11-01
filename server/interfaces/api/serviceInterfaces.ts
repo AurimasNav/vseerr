@@ -1,5 +1,6 @@
 import type { QualityProfile, RootFolder, Tag } from '@server/api/servarr/base';
 import type { LanguageProfile } from '@server/api/servarr/sonarr';
+import type { PublicRequestOption } from '@server/lib/requestOptions';
 
 export interface ServiceCommonServer {
   id: number;
@@ -16,6 +17,7 @@ export interface ServiceCommonServer {
   activeAnimeTags?: number[];
   buttonLabel?: string;
   animeOnly?: boolean;
+  requestOptions?: PublicRequestOption[];
 }
 
 export interface ServiceCommonServerWithDetails {

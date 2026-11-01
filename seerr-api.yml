@@ -574,6 +574,28 @@ components:
         externalUrl:
           type: string
           nullable: true
+    RequestOption:
+      type: object
+      properties:
+        id:
+          type: string
+          example: english-until-dubbed
+        label:
+          type: string
+          example: English is OK until a Lithuanian dub appears
+        profileId:
+          type: number
+          example: 8
+        profileName:
+          type: string
+          example: Lithuanian or English
+        onlyIfNoOtherVersion:
+          type: boolean
+          example: true
+          description: Use the option's profile only while no other version has the title (available, partly available or downloading).
+      required:
+        - label
+        - profileId
     RadarrSettings:
       type: object
       properties:
@@ -634,6 +656,11 @@ components:
           type: boolean
           example: false
           description: Only show this server's request button for anime
+        requestOptions:
+          type: array
+          description: VSeerr. Extra choices shown under this version in the request dialog; a ticked option requests with its quality profile.
+          items:
+            $ref: '#/components/schemas/RequestOption'
       required:
         - name
         - hostname
@@ -722,6 +749,11 @@ components:
           type: boolean
           example: false
           description: Only show this server's request button for anime
+        requestOptions:
+          type: array
+          description: VSeerr. Extra choices shown under this version in the request dialog; a ticked option requests with its quality profile.
+          items:
+            $ref: '#/components/schemas/RequestOption'
       required:
         - name
         - hostname
@@ -6733,6 +6765,9 @@ paths:
                   type: boolean
                   example: false
                   description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+                requestOption:
+                  type: string
+                  description: VSeerr. Id of one of the chosen version's request options (requires isServiceRequest and serverId).
               required:
                 - mediaType
                 - mediaId

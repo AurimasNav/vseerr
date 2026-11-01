@@ -2,6 +2,7 @@ import Badge from '@app/components/Common/Badge';
 import { getStatusLabel } from '@app/components/StatusBadge';
 import defineMessages from '@app/utils/defineMessages';
 import type { VersionChoice, VersionKey } from '@app/utils/versionChoices';
+import { optionApplies } from '@app/utils/versionChoices';
 import { MediaStatus } from '@server/constants/media';
 import { useIntl } from 'react-intl';
 
@@ -15,6 +16,9 @@ const messages = defineMessages('components.RequestModal.VersionPicker', {
   usebydefault: 'Use this version by default',
   usebydefaultdescription:
     'Preselects it next time on this device. You can still change it.',
+  optionremembered: 'Remembered on this device for this version.',
+  optionnotapplied:
+    'Another version already has this title, so this does not apply now.',
 });
 
 interface VersionPickerProps {
@@ -23,6 +27,9 @@ interface VersionPickerProps {
   onSelect: (key: VersionKey) => void;
   useByDefault: boolean;
   onUseByDefaultChange: (value: boolean) => void;
+  /** The ticked request option of the chosen version. */
+  optionId?: string | null;
+  onOptionChange?: (id: string | null) => void;
   /** Off where the choice covers several titles (collections). */
   showStatus?: boolean;
 }
@@ -34,9 +41,14 @@ const VersionPicker = ({
   onSelect,
   useByDefault,
   onUseByDefaultChange,
+  optionId = null,
+  onOptionChange,
   showStatus = true,
 }: VersionPickerProps) => {
   const intl = useIntl();
+  const selectedChoice = choices.find((c) => c.key === selected);
+  const options =
+    selectedChoice?.requestable && onOptionChange ? selectedChoice.options : [];
 
   return (
     <fieldset className="mt-6" data-testid="version-picker">
@@ -110,6 +122,50 @@ const VersionPicker = ({
           );
         })}
       </div>
+      {selectedChoice &&
+        options.map((option) => {
+          const id = `version-option-${option.id}`;
+          const blocked = !optionApplies(selectedChoice, option);
+          return (
+            <div
+              key={option.id}
+              className={`mt-3 flex items-start gap-3 ${
+                blocked ? 'opacity-60' : ''
+              }`}
+              data-testid="version-option"
+            >
+              <input
+                id={id}
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-500 bg-gray-800 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                checked={!blocked && optionId === option.id}
+                disabled={blocked}
+                aria-describedby={`${id}-description`}
+                onChange={(e) =>
+                  onOptionChange?.(e.target.checked ? option.id : null)
+                }
+              />
+              <div className="flex flex-col">
+                <label
+                  htmlFor={id}
+                  className="cursor-pointer text-sm text-gray-100"
+                >
+                  {option.label}
+                </label>
+                <span
+                  id={`${id}-description`}
+                  className="text-xs text-gray-400"
+                >
+                  {intl.formatMessage(
+                    blocked
+                      ? messages.optionnotapplied
+                      : messages.optionremembered
+                  )}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       <div
         className={`mt-3 flex items-start gap-3 ${
           selected ? '' : 'opacity-60'

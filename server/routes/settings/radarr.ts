@@ -1,4 +1,5 @@
 import RadarrAPI from '@server/api/servarr/radarr';
+import { sanitizeRequestOptions } from '@server/lib/requestOptions';
 import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -17,6 +18,7 @@ radarrRoutes.post('/', async (req, res) => {
   const settings = getSettings();
 
   const newRadarr = req.body as RadarrSettings;
+  newRadarr.requestOptions = sanitizeRequestOptions(newRadarr.requestOptions);
   const lastItem = settings.radarr[settings.radarr.length - 1];
   newRadarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -102,6 +104,7 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
     settings.radarr[radarrIndex] = {
       ...req.body,
       id: Number(req.params.id),
+      requestOptions: sanitizeRequestOptions(req.body.requestOptions),
     } as RadarrSettings;
     await settings.save();
 

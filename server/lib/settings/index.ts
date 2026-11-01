@@ -86,6 +86,26 @@ export interface DVRSettings {
   overrideRule: number[];
   buttonLabel?: string;
   animeOnly?: boolean;
+  /** VSeerr: extra choices shown under this version in the request dialog. */
+  requestOptions?: RequestOption[];
+}
+
+/**
+ * VSeerr: an extra request choice for one version, e.g. "English is OK until
+ * a Lithuanian dub appears". Ticking it sends the request with `profileId`
+ * instead of the server's default profile.
+ */
+export interface RequestOption {
+  /** Stable identifier, unique within the server. */
+  id: string;
+  label: string;
+  profileId: number;
+  profileName?: string;
+  /**
+   * Only applies while no other version has the title (available, partly
+   * available or downloading); otherwise the default profile is used.
+   */
+  onlyIfNoOtherVersion: boolean;
 }
 
 export interface RadarrSettings extends DVRSettings {
