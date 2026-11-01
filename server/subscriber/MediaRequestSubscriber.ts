@@ -21,7 +21,10 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import { upsertMediaServiceStatus } from '@server/lib/mediaServiceStatus';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { getSettings } from '@server/lib/settings';
-import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
+import {
+  requestNotificationLabel,
+  withVersion,
+} from '@server/lib/versionLabel';
 import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
@@ -105,7 +108,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const tmdb = new TheMovieDb();
-    const serviceLabel = requestVersionLabel(entity);
+    const serviceLabel = await requestNotificationLabel(entity);
 
     try {
       const movie = await tmdb.getMovie({
@@ -184,7 +187,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const tmdb = new TheMovieDb();
-    const serviceLabel = requestVersionLabel(entity);
+    const serviceLabel = await requestNotificationLabel(entity);
 
     try {
       const tv = await tmdb.getTvShow({ tvId: entity.media.tmdbId });

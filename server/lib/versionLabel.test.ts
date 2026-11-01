@@ -10,7 +10,9 @@ import type { NotificationPayload } from '@server/lib/notifications/agents/agent
 import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
+  requestNotificationLabel,
   requestVersionLabel,
+  standardLabelFrom,
   versionLabelFrom,
   withVersion,
 } from '@server/lib/versionLabel';
@@ -57,6 +59,60 @@ describe('versionLabelFrom', () => {
       versionLabelFrom(
         { type: MediaType.MOVIE, isServiceRequest: true, serverId: 9 },
         servers
+      ),
+      undefined
+    );
+  });
+});
+
+describe('standardLabelFrom', () => {
+  const withVersions = [
+    {
+      id: 0,
+      name: 'Radarr',
+      isDefault: true,
+      is4k: false,
+      activeProfileId: 14,
+    },
+    { id: 1, name: 'Radarr RU', buttonLabel: 'Russian', is4k: false },
+  ];
+  const standard = (profileId?: number) => ({
+    type: MediaType.MOVIE,
+    isServiceRequest: false,
+    serverId: 0,
+    profileId,
+  });
+
+  it('names a standard request once the server has versions', () => {
+    assert.strictEqual(standardLabelFrom(standard(), withVersions), 'Standard');
+  });
+
+  it('adds a profile that is not the server default', () => {
+    assert.strictEqual(
+      standardLabelFrom(standard(13), withVersions, 'Anime dub-only'),
+      'Standard (Anime dub-only)'
+    );
+  });
+
+  it('leaves out the default profile', () => {
+    assert.strictEqual(
+      standardLabelFrom(standard(14), withVersions, 'Anime subs-until-dub'),
+      'Standard'
+    );
+  });
+
+  it('keeps Seerr wording without versions', () => {
+    assert.strictEqual(
+      standardLabelFrom(standard(13), [withVersions[0]], 'Anime dub-only'),
+      undefined
+    );
+  });
+
+  it('never labels a version request as standard', () => {
+    assert.strictEqual(
+      standardLabelFrom(
+        { type: MediaType.MOVIE, isServiceRequest: true, serverId: 1 },
+        withVersions
       ),
       undefined
     );
@@ -161,15 +217,56 @@ describe('request notifications name the version', () => {
     ]);
   });
 
-  it('keeps the Seerr wording for a standard request', async () => {
+  it('says "in Standard" for a standard request', async () => {
     await MediaRequest.sendNotification(
-      request(MediaType.MOVIE, false, 1),
+      request(MediaType.MOVIE, false, 0),
+      media,
+      Notification.MEDIA_APPROVED
+    );
+    assert.deepStrictEqual(sent, [
+      {
+        type: Notification.MEDIA_APPROVED,
+        event: 'Movie Request Approved in Standard',
+      },
+    ]);
+  });
+
+  it('keeps the Seerr wording when no server has versions', async () => {
+    getSettings().radarr = [{ id: 0, name: 'Radarr' }] as RadarrSettings[];
+    await MediaRequest.sendNotification(
+      request(MediaType.MOVIE, false, 0),
       media,
       Notification.MEDIA_APPROVED
     );
     assert.deepStrictEqual(sent, [
       { type: Notification.MEDIA_APPROVED, event: 'Movie Request Approved' },
     ]);
+  });
+
+  it('names the profile when the arr cannot be reached', async () => {
+    getSettings().radarr = [
+      {
+        id: 0,
+        name: 'Radarr',
+        hostname: '127.0.0.1',
+        port: 1,
+        apiKey: 'x',
+        useSsl: false,
+        activeProfileId: 14,
+        isDefault: true,
+        is4k: false,
+      },
+      { id: 1, name: 'Radarr RU', buttonLabel: 'Russian' },
+    ] as RadarrSettings[];
+    assert.strictEqual(
+      await requestNotificationLabel({
+        type: MediaType.MOVIE,
+        isServiceRequest: false,
+        serverId: 0,
+        profileId: 13,
+      }),
+      'Standard'
+    );
   });
 
   it('reads the version from the current settings', () => {

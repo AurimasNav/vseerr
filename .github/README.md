@@ -20,7 +20,7 @@ VSeerr adds versions:
 - Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
 - A version can offer extra request options, each tied to one of its quality profiles. For example, a German version can offer "English is fine until a German dub appears".
 - The standard server can offer request options too. An option marked "Anime only" is offered only for titles with TMDB's anime keyword. For example, "English dub only" can switch an anime request from a subs-friendly profile to a dub-only one.
-- Request notifications name the version, for example "Movie Request Approved in German".
+- Request notifications name the version, for example "Movie Request Approved in German". Standard requests say "in Standard", plus the quality profile when it is not the server's default, for example "in Standard (Anime dub-only)".
 - The title page shows, for every user, what each version's files contain: resolution, matched custom formats and audio languages.
 - A version can define the custom formats that make a file count as it, for example "German audio". When another version's file has them, the version shows as available through that one, and only users with Manage Requests can request it. While a request in another version is less than a day old, the same applies, in case that download covers it. For shows this works per season.
 
