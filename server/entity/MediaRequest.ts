@@ -9,6 +9,10 @@ import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces'
 import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
+import {
+  otherVersionHasTitle,
+  requestOptionProfile,
+} from '@server/lib/requestOptions';
 import { getSettings } from '@server/lib/settings';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
@@ -351,6 +355,52 @@ export class MediaRequest {
     let rootFolder = requestBody.rootFolder;
     let profileId = requestBody.profileId;
     let tags = requestBody.tags;
+    let optionProfileApplied = false;
+
+    // VSeerr request option: a choice the admin attached to the version
+    // (e.g. "English is OK until a Lithuanian dub appears"). It picks the
+    // quality profile; an explicit profileId from an advanced requester wins.
+    if (requestBody.requestOption !== undefined) {
+      const servers =
+        requestBody.mediaType === MediaType.MOVIE
+          ? settings.radarr
+          : settings.sonarr;
+      const server = isServiceSpecific
+        ? servers.find((s) => s.id === requestBody.serverId)
+        : undefined;
+      const option = server?.requestOptions?.find(
+        (o) => o.id === requestBody.requestOption
+      );
+      if (!option) {
+        throw new InvalidServiceRequestError(
+          'This request option does not exist for the chosen version.'
+        );
+      }
+      const standardServers = servers.filter((s) => !s.is4k);
+      const statusRows = media?.id
+        ? await getRepository(MediaServiceStatus).find({
+            where: { mediaId: media.id },
+          })
+        : [];
+      const optionProfile = requestOptionProfile(
+        option,
+        otherVersionHasTitle({
+          serverId: requestBody.serverId ?? undefined,
+          standardStatus: media?.id ? media.status : undefined,
+          serviceStatuses: statusRows,
+          standardServerIds: standardServers
+            .filter((s) => !s.buttonLabel?.trim())
+            .map((s) => s.id),
+          versionServerIds: standardServers
+            .filter((s) => !!s.buttonLabel?.trim())
+            .map((s) => s.id),
+        })
+      );
+      if (optionProfile !== undefined && !profileId) {
+        profileId = optionProfile;
+        optionProfileApplied = true;
+      }
+    }
 
     const ruleResult = await overrideRules({
       mediaType: requestBody.mediaType,
@@ -374,7 +424,8 @@ export class MediaRequest {
     if (overrideRulesResult.rootFolder) {
       rootFolder = overrideRulesResult.rootFolder;
     }
-    if (overrideRulesResult.profileId) {
+    // The requester's explicit option outranks a generic override rule.
+    if (overrideRulesResult.profileId && !optionProfileApplied) {
       profileId = overrideRulesResult.profileId;
     }
     if (overrideRulesResult.tags) {

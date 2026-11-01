@@ -1994,3 +1994,118 @@ describe('POST /request, per-service slots', () => {
     });
   });
 });
+
+describe('POST /request, version request options', () => {
+  const OPTION = {
+    id: 'english-until-dubbed',
+    label: 'English is OK until a dub appears',
+    profileId: 8,
+    onlyIfNoOtherVersion: true,
+  };
+
+  beforeEach(async () => {
+    configureRadarr([
+      { name: 'Radarr' },
+      {
+        name: 'Radarr LT',
+        buttonLabel: 'Lithuanian',
+        activeProfileId: 7,
+        requestOptions: [OPTION],
+      },
+    ]);
+    getSettings().sonarr = [];
+    const user = await getRepository(User).findOneOrFail({
+      where: { email: 'demo@seerr.dev' },
+    });
+    await setUserVersions(user.id, ['radarr:1']);
+  });
+
+  const requestIn = (mediaId: number, extra: Record<string, unknown> = {}) => ({
+    mediaType: 'movie',
+    mediaId,
+    serverId: 1,
+    isServiceRequest: true,
+    ...extra,
+  });
+
+  async function seedStandardStatus(tmdbId: number, status: MediaStatus) {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MOVIE,
+        tmdbId,
+        status,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    await getRepository(MediaServiceStatus).save(
+      Object.assign(new MediaServiceStatus(), {
+        mediaId: media.id,
+        serviceId: 0,
+        serviceType: 'radarr',
+        status,
+      })
+    );
+  }
+
+  it('requests with the option profile while no other version has the title', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send(requestIn(77001, { requestOption: OPTION.id }));
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.profileId, 8);
+  });
+
+  it('uses the default profile when the standard version already has it', async () => {
+    await seedStandardStatus(77002, MediaStatus.AVAILABLE);
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send(requestIn(77002, { requestOption: OPTION.id }));
+
+    assert.strictEqual(res.status, 201);
+    assert.ok(!res.body.profileId || res.body.profileId === 7);
+  });
+
+  it('leaves the profile alone without an option', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send(requestIn(77003));
+
+    assert.strictEqual(res.status, 201);
+    assert.ok(!res.body.profileId || res.body.profileId === 7);
+  });
+
+  it('rejects an option the version does not have', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send(requestIn(77004, { requestOption: 'nope' }));
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('rejects an option on a standard request', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 77005,
+      requestOption: OPTION.id,
+    });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('outranks a profile override rule', async () => {
+    await getRepository(OverrideRule).save(
+      new OverrideRule({ radarrServiceId: 1, profileId: 9 })
+    );
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send(requestIn(77006, { requestOption: OPTION.id }));
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.profileId, 8);
+  });
+});

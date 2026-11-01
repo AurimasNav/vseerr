@@ -1,5 +1,6 @@
 import Modal from '@app/components/Common/Modal';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import RequestOptionsEditor from '@app/components/Settings/RequestOptionsEditor';
 import type { RadarrTestResponse } from '@app/components/Settings/SettingsServices';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
@@ -249,6 +250,7 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
           tagRequests: radarr?.tagRequests ?? false,
           buttonLabel: radarr?.buttonLabel ?? '',
           animeOnly: radarr?.animeOnly ?? false,
+          requestOptions: radarr?.requestOptions ?? [],
         }}
         validationSchema={RadarrSettingsSchema}
         onSubmit={async (values) => {
@@ -277,6 +279,11 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
               tagRequests: values.tagRequests,
               buttonLabel: values.buttonLabel || undefined,
               animeOnly: values.animeOnly,
+              requestOptions: values.buttonLabel
+                ? values.requestOptions.filter(
+                    (o) => o.label.trim() && o.profileId > 0
+                  )
+                : [],
             };
             if (!radarr) {
               await axios.post('/api/v1/settings/radarr', submission);
@@ -804,6 +811,12 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                     <Field type="checkbox" id="animeOnly" name="animeOnly" />
                   </div>
                 </div>
+                <RequestOptionsEditor
+                  value={values.requestOptions}
+                  onChange={(value) => setFieldValue('requestOptions', value)}
+                  profiles={testResponse.profiles}
+                  hasVersionName={!!values.buttonLabel?.trim()}
+                />
               </div>
             </Modal>
           );

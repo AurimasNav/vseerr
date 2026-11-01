@@ -1,6 +1,8 @@
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
+import type { PublicRequestOption } from '@server/lib/requestOptions';
+import { otherVersionHasTitle } from '@server/lib/requestOptions';
 import {
   getLabelledServices,
   getMediaServiceStatus,
@@ -27,6 +29,13 @@ export interface VersionChoice {
   requestable: boolean;
   /** The user already requested another version of this title. */
   otherVersionHeld: boolean;
+  /** Extra choices the admin attached to this version. */
+  options: PublicRequestOption[];
+  /**
+   * Another version has the title (available or downloading), so options
+   * marked "only if no other version has the title" do not apply.
+   */
+  otherVersionHasTitle: boolean;
 }
 
 export const versionKey = (
@@ -105,6 +114,19 @@ export const getVersionChoices = ({
   const blocklisted = media?.status === MediaStatus.BLOCKLISTED;
 
   const standardStatus = media?.status ?? MediaStatus.UNKNOWN;
+  const standardServers = (services ?? []).filter((s) => !s.is4k);
+  const hasTitleElsewhere = (serverId?: number) =>
+    otherVersionHasTitle({
+      serverId,
+      standardStatus,
+      serviceStatuses: media?.serviceStatuses ?? [],
+      standardServerIds: standardServers
+        .filter((s) => !s.buttonLabel?.trim())
+        .map((s) => s.id),
+      versionServerIds: standardServers
+        .filter((s) => !!s.buttonLabel?.trim())
+        .map((s) => s.id),
+    });
   const choices: VersionChoice[] = [
     {
       key: STANDARD_VERSION,
@@ -114,6 +136,8 @@ export const getVersionChoices = ({
         (standardRequestable ?? isOpenStatus(mediaType, standardStatus)) &&
         !closedByOtherVersion(STANDARD_VERSION),
       otherVersionHeld: closedByOtherVersion(STANDARD_VERSION),
+      options: [],
+      otherVersionHasTitle: false,
     },
   ];
 
@@ -136,6 +160,8 @@ export const getVersionChoices = ({
         isOpenStatus(mediaType, status) &&
         !closedByOtherVersion(key),
       otherVersionHeld: closedByOtherVersion(key),
+      options: service.requestOptions ?? [],
+      otherVersionHasTitle: hasTitleElsewhere(service.id),
     });
   }
 
@@ -192,4 +218,61 @@ export const initialVersionChoice = (
     return remembered;
   }
   return requestable.length === 1 ? requestable[0].key : null;
+};
+
+/**
+ * Whether an option takes effect: options marked "only if no other version
+ * has the title" are skipped once another version has it. The server
+ * applies the same rule.
+ */
+export const optionApplies = (
+  choice: Pick<VersionChoice, 'otherVersionHasTitle'>,
+  option: Pick<PublicRequestOption, 'onlyIfNoOtherVersion'>
+): boolean => !(option.onlyIfNoOtherVersion && choice.otherVersionHasTitle);
+
+const optionStorageKey = (
+  userId: number,
+  mediaType: 'movie' | 'tv',
+  key: VersionKey
+) => `vseerr-version-option-${userId}-${mediaType}-${key}`;
+
+/** The option the user last ticked for this version on this device. */
+export const getRememberedOption = (
+  userId: number | undefined,
+  mediaType: 'movie' | 'tv',
+  key: VersionKey | null
+): string | null => {
+  if (userId == null || !key || typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(
+      optionStorageKey(userId, mediaType, key)
+    );
+  } catch {
+    return null;
+  }
+};
+
+export const setRememberedOption = (
+  userId: number | undefined,
+  mediaType: 'movie' | 'tv',
+  key: VersionKey | null,
+  optionId: string | null
+): void => {
+  if (userId == null || !key || typeof window === 'undefined') {
+    return;
+  }
+  try {
+    if (optionId) {
+      window.localStorage.setItem(
+        optionStorageKey(userId, mediaType, key),
+        optionId
+      );
+    } else {
+      window.localStorage.removeItem(optionStorageKey(userId, mediaType, key));
+    }
+  } catch {
+    // Storage can be unavailable (private mode); the choice is not kept.
+  }
 };

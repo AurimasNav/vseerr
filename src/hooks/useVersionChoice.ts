@@ -1,9 +1,12 @@
 import { Permission, useUser } from '@app/hooks/useUser';
 import type { VersionKey } from '@app/utils/versionChoices';
 import {
+  getRememberedOption,
   getRememberedVersion,
   getVersionChoices,
   initialVersionChoice,
+  optionApplies,
+  setRememberedOption,
   setRememberedVersion,
 } from '@app/utils/versionChoices';
 import type Media from '@server/entity/Media';
@@ -43,6 +46,10 @@ const useVersionChoice = ({
   const [useByDefaultChoice, setUseByDefaultChoice] = useState<boolean | null>(
     null
   );
+  /** Ticked option per version; undefined = not touched (use the remembered one). */
+  const [pickedOptions, setPickedOptions] = useState<
+    Record<VersionKey, string | null>
+  >({});
 
   const choices = enabled
     ? getVersionChoices({
@@ -61,6 +68,14 @@ const useVersionChoice = ({
   const showPicker = choices.length > 1;
   const useByDefault =
     useByDefaultChoice ?? (!!selected && selected === remembered);
+  const rememberedOption = getRememberedOption(user?.id, mediaType, selected);
+  const optionId =
+    selected && selected in pickedOptions
+      ? pickedOptions[selected]
+      : choice?.options.some((o) => o.id === rememberedOption)
+        ? rememberedOption
+        : null;
+  const option = choice?.options.find((o) => o.id === optionId);
 
   return {
     /** Services are still loading, so the choices are not known yet. */
@@ -70,6 +85,11 @@ const useVersionChoice = ({
     serverId: showPicker ? choice?.serverId : undefined,
     /** The picker is shown and no requestable version is chosen. */
     missing: showPicker && !choice?.requestable,
+    /** The ticked request option of the chosen version, if any. */
+    requestOption:
+      showPicker && option && choice && optionApplies(choice, option)
+        ? option.id
+        : undefined,
     pickerProps: {
       choices,
       selected,
@@ -81,6 +101,12 @@ const useVersionChoice = ({
       },
       useByDefault,
       onUseByDefaultChange: setUseByDefaultChoice,
+      optionId: optionId ?? null,
+      onOptionChange: (id: string | null) => {
+        if (selected) {
+          setPickedOptions((current) => ({ ...current, [selected]: id }));
+        }
+      },
     },
     /** Stores or clears the default after a successful request. */
     commit: () => {
@@ -91,6 +117,9 @@ const useVersionChoice = ({
         setRememberedVersion(user?.id, mediaType, selected);
       } else if (remembered === selected) {
         setRememberedVersion(user?.id, mediaType, null);
+      }
+      if (choice?.options.length) {
+        setRememberedOption(user?.id, mediaType, selected, optionId ?? null);
       }
     },
   };

@@ -238,7 +238,13 @@ const CollectionRequestModal = ({
             mediaType: 'movie',
             is4k,
             ...(requestServerId != null
-              ? { serverId: requestServerId, isServiceRequest: true }
+              ? {
+                  serverId: requestServerId,
+                  isServiceRequest: true,
+                  ...(version.requestOption
+                    ? { requestOption: version.requestOption }
+                    : {}),
+                }
               : {}),
             ...overrideParams,
           });

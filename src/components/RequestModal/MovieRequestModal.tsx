@@ -85,6 +85,7 @@ const MovieRequestModal = ({
   });
   const requestServerId = serverId ?? version.serverId;
   const commitVersion = version.commit;
+  const requestOption = version.requestOption;
 
   useEffect(() => {
     if (onUpdating) {
@@ -111,7 +112,11 @@ const MovieRequestModal = ({
         mediaType: 'movie',
         is4k,
         ...(requestServerId != null
-          ? { serverId: requestServerId, isServiceRequest: true }
+          ? {
+              serverId: requestServerId,
+              isServiceRequest: true,
+              ...(requestOption ? { requestOption } : {}),
+            }
           : {}),
         ignoreQuota: requestOverrides?.ignoreQuota,
         ...overrideParams,
@@ -159,6 +164,7 @@ const MovieRequestModal = ({
     data?.title,
     is4k,
     requestServerId,
+    requestOption,
     commitVersion,
     onComplete,
     addToast,

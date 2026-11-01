@@ -1,5 +1,6 @@
 import Modal from '@app/components/Common/Modal';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import RequestOptionsEditor from '@app/components/Settings/RequestOptionsEditor';
 import type { SonarrTestResponse } from '@app/components/Settings/SettingsServices';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
@@ -268,6 +269,7 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
           tagRequests: sonarr?.tagRequests ?? false,
           buttonLabel: sonarr?.buttonLabel ?? '',
           animeOnly: sonarr?.animeOnly ?? false,
+          requestOptions: sonarr?.requestOptions ?? [],
           monitorNewItems: sonarr?.monitorNewItems ?? 'all',
         }}
         validationSchema={SonarrSettingsSchema}
@@ -314,6 +316,11 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
               tagRequests: values.tagRequests,
               buttonLabel: values.buttonLabel || undefined,
               animeOnly: values.animeOnly,
+              requestOptions: values.buttonLabel
+                ? values.requestOptions.filter(
+                    (o) => o.label.trim() && o.profileId > 0
+                  )
+                : [],
               monitorNewItems: values.monitorNewItems,
             };
             if (!sonarr) {
@@ -1141,6 +1148,12 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                     <Field type="checkbox" id="animeOnly" name="animeOnly" />
                   </div>
                 </div>
+                <RequestOptionsEditor
+                  value={values.requestOptions}
+                  onChange={(value) => setFieldValue('requestOptions', value)}
+                  profiles={testResponse.profiles}
+                  hasVersionName={!!values.buttonLabel?.trim()}
+                />
               </div>
             </Modal>
           );
