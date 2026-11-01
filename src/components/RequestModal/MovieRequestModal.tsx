@@ -408,6 +408,7 @@ const MovieRequestModal = ({
           is4k={is4k}
           quota={quota}
           serverFixed={requestServerId != null}
+          optionProfileId={version.requestOptionProfileId}
           defaultOverrides={
             requestServerId != null ? { server: requestServerId } : undefined
           }

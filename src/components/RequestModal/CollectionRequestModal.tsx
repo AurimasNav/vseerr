@@ -611,6 +611,7 @@ const CollectionRequestModal = ({
           is4k={is4k}
           key={version.pickerProps.selected ?? 'none'}
           serverFixed={requestServerId != null}
+          optionProfileId={version.requestOptionProfileId}
           defaultOverrides={
             requestServerId != null ? { server: requestServerId } : undefined
           }

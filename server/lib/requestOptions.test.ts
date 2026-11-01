@@ -76,7 +76,7 @@ describe('sanitizeRequestOptions', () => {
 });
 
 describe('publicRequestOptions', () => {
-  it('hides the profile from requesters', () => {
+  it('shows the profile id but not its name', () => {
     assert.deepStrictEqual(
       publicRequestOptions([
         {
@@ -87,7 +87,7 @@ describe('publicRequestOptions', () => {
           onlyIfNoOtherVersion: true,
         },
       ]),
-      [{ id: 'a', label: 'A', onlyIfNoOtherVersion: true }]
+      [{ id: 'a', label: 'A', profileId: 8, onlyIfNoOtherVersion: true }]
     );
     assert.deepStrictEqual(publicRequestOptions(undefined), []);
   });
@@ -205,6 +205,7 @@ describe('anime-only options', () => {
       {
         id: 'english-dub-only',
         label: 'English dub only',
+        profileId: 13,
         onlyIfNoOtherVersion: false,
         animeOnly: true,
       },

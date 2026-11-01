@@ -14,6 +14,7 @@ import {
   requestVersionLabel,
   standardLabelFrom,
   versionLabelFrom,
+  withProfile,
   withVersion,
 } from '@server/lib/versionLabel';
 
@@ -116,6 +117,20 @@ describe('standardLabelFrom', () => {
       ),
       undefined
     );
+  });
+});
+
+describe('withProfile', () => {
+  it('adds the profile name', () => {
+    assert.strictEqual(
+      withProfile('Lithuanian', 'Lithuanian or English'),
+      'Lithuanian (Lithuanian or English)'
+    );
+  });
+
+  it('keeps the label without a profile name', () => {
+    assert.strictEqual(withProfile('Lithuanian', '  '), 'Lithuanian');
+    assert.strictEqual(withProfile('Lithuanian'), 'Lithuanian');
   });
 });
 
@@ -277,6 +292,58 @@ describe('request notifications name the version', () => {
         serverId: 1,
       }),
       'Russian'
+    );
+  });
+});
+
+describe('requestNotificationLabel for versions', () => {
+  afterEach(() => {
+    getSettings().radarr = [];
+  });
+
+  it('keeps the version name when the profile is the default', async () => {
+    getSettings().radarr = [
+      { id: 0, name: 'Radarr', isDefault: true },
+      {
+        id: 2,
+        name: 'Radarr LT',
+        buttonLabel: 'Lithuanian',
+        activeProfileId: 7,
+      },
+    ] as unknown as RadarrSettings[];
+    assert.strictEqual(
+      await requestNotificationLabel({
+        type: MediaType.MOVIE,
+        isServiceRequest: true,
+        serverId: 2,
+        profileId: 7,
+      }),
+      'Lithuanian'
+    );
+  });
+
+  it('falls back to the version name when the arr cannot be reached', async () => {
+    getSettings().radarr = [
+      { id: 0, name: 'Radarr', isDefault: true },
+      {
+        id: 2,
+        name: 'Radarr LT',
+        buttonLabel: 'Lithuanian',
+        activeProfileId: 7,
+        hostname: '127.0.0.1',
+        port: 1,
+        apiKey: 'x',
+        useSsl: false,
+      },
+    ] as unknown as RadarrSettings[];
+    assert.strictEqual(
+      await requestNotificationLabel({
+        type: MediaType.MOVIE,
+        isServiceRequest: true,
+        serverId: 2,
+        profileId: 8,
+      }),
+      'Lithuanian'
     );
   });
 });

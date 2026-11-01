@@ -822,6 +822,7 @@ const TvRequestModal = ({
           tmdbId={tmdbId}
           is4k={is4k}
           serverFixed={requestServerId != null}
+          optionProfileId={version.requestOptionProfileId}
           isAnime={data?.keywords.some(
             (keyword) => keyword.id === ANIME_KEYWORD_ID
           )}

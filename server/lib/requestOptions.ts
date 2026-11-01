@@ -18,11 +18,15 @@ export interface RequestOptionSetting {
   animeOnly?: boolean;
 }
 
-/** What requesters see: no profile details. */
+/**
+ * What requesters see: the profile id (so the Advanced section can show the
+ * profile the option requests), not the profile name.
+ */
 export type PublicRequestOption = Pick<
   RequestOptionSetting,
   'id' | 'label' | 'onlyIfNoOtherVersion' | 'animeOnly'
->;
+> &
+  Partial<Pick<RequestOptionSetting, 'profileId'>>;
 
 export const MAX_REQUEST_OPTIONS = 10;
 const MAX_LABEL_LENGTH = 100;
@@ -88,12 +92,15 @@ export const sanitizeRequestOptions = (
 export const publicRequestOptions = (
   options: RequestOptionSetting[] | undefined
 ): PublicRequestOption[] =>
-  (options ?? []).map(({ id, label, onlyIfNoOtherVersion, animeOnly }) => ({
-    id,
-    label,
-    onlyIfNoOtherVersion,
-    ...(animeOnly ? { animeOnly: true } : {}),
-  }));
+  (options ?? []).map(
+    ({ id, label, profileId, onlyIfNoOtherVersion, animeOnly }) => ({
+      id,
+      label,
+      profileId,
+      onlyIfNoOtherVersion,
+      ...(animeOnly ? { animeOnly: true } : {}),
+    })
+  );
 
 /** Whether TMDB marks the title as anime (movies list keywords, shows results). */
 export const isAnimeTitle = (media: {

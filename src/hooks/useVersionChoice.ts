@@ -100,6 +100,11 @@ const useVersionChoice = ({
       showPicker && option && choice && optionApplies(choice, option)
         ? option.id
         : undefined,
+    /** Its quality profile, shown in the Advanced section. */
+    requestOptionProfileId:
+      showPicker && option && choice && optionApplies(choice, option)
+        ? option.profileId
+        : undefined,
     pickerProps: {
       choices,
       selected,
