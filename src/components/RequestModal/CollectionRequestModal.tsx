@@ -5,15 +5,18 @@ import Modal from '@app/components/Common/Modal';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
 import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
+import VersionPicker from '@app/components/RequestModal/VersionPicker';
 import { getStatusLabel } from '@app/components/StatusBadge';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
+import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import {
   getLabelledServices,
   getMediaServiceStatus,
 } from '@app/utils/serviceRequestStatus';
+import { holdsOtherVersion } from '@app/utils/versionChoices';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
@@ -79,16 +82,33 @@ const CollectionRequestModal = ({
   const { data: services } = useSWR<ServiceCommonServer[]>(
     '/api/v1/service/radarr'
   );
+  const version = useVersionChoice({
+    mediaType: 'movie',
+    enabled: serverId == null && !is4k,
+    onChange: () => {
+      setSelectedParts([]);
+      setRequestOverrides(null);
+    },
+  });
+  const requestServerId = serverId ?? version.serverId;
+  const isManager = hasPermission(Permission.MANAGE_REQUESTS);
+  // One version of each movie per user (see versionChoices.ts).
+  const isHeldElsewhere = (part: MovieResult): boolean =>
+    !is4k &&
+    !isManager &&
+    holdsOtherVersion(part.mediaInfo, user?.id, 'movie', requestServerId);
   const selectedService =
-    serverId != null ? services?.find((s) => s.id === serverId) : undefined;
+    requestServerId != null
+      ? services?.find((s) => s.id === requestServerId)
+      : undefined;
   const serviceLabel = selectedService?.buttonLabel ?? selectedService?.name;
 
   const currentlyRemaining =
     (quota?.movie.remaining ?? 0) - selectedParts.length;
 
   const getPartStatus = (part: MovieResult): MediaStatus | undefined =>
-    serverId != null
-      ? getMediaServiceStatus(part.mediaInfo, serverId).status
+    requestServerId != null
+      ? getMediaServiceStatus(part.mediaInfo, requestServerId).status
       : part.mediaInfo?.[is4k ? 'status4k' : 'status'];
 
   const getPartRequest = (tmdbId: number): MediaRequest | undefined => {
@@ -96,8 +116,8 @@ const CollectionRequestModal = ({
 
     return (part?.mediaInfo?.requests ?? []).find(
       (request) =>
-        (serverId != null
-          ? request.isServiceRequest && request.serverId === serverId
+        (requestServerId != null
+          ? request.isServiceRequest && request.serverId === requestServerId
           : !request.isServiceRequest && request.is4k === is4k) &&
         request.status !== MediaRequestStatus.DECLINED &&
         request.status !== MediaRequestStatus.COMPLETED
@@ -112,7 +132,7 @@ const CollectionRequestModal = ({
 
   const getAllRequestedParts = (): number[] => {
     const requestedParts = (data?.parts ?? [])
-      .filter((part) => getPartRequest(part.id))
+      .filter((part) => getPartRequest(part.id) || isHeldElsewhere(part))
       .map((part) => part.id);
 
     const availableParts = (data?.parts ?? [])
@@ -217,12 +237,15 @@ const CollectionRequestModal = ({
             mediaId: part.id,
             mediaType: 'movie',
             is4k,
-            ...(serverId != null ? { serverId, isServiceRequest: true } : {}),
+            ...(requestServerId != null
+              ? { serverId: requestServerId, isServiceRequest: true }
+              : {}),
             ...overrideParams,
           });
         })
       );
 
+      version.commit();
       if (onComplete) {
         onComplete(
           selectedParts.length === (data?.parts ?? []).length
@@ -258,7 +281,8 @@ const CollectionRequestModal = ({
     intl,
     selectedParts,
     is4k,
-    serverId,
+    requestServerId,
+    version,
   ]);
 
   const hasAutoApprove = hasPermission(
@@ -277,12 +301,12 @@ const CollectionRequestModal = ({
 
   return (
     <Modal
-      loading={(!data && !error) || !quota}
+      loading={(!data && !error) || !quota || version.loading}
       backgroundClickable
       onCancel={onCancel}
       onOk={sendRequest}
       title={
-        serverId != null
+        requestServerId != null && !version.showPicker
           ? intl.formatMessage(messages.requestcollectioninservicetitle, {
               label: serviceLabel ?? '',
             })
@@ -298,7 +322,7 @@ const CollectionRequestModal = ({
           ? intl.formatMessage(globalMessages.requesting)
           : selectedParts.length === 0
             ? intl.formatMessage(messages.selectmovies)
-            : serverId != null
+            : requestServerId != null
               ? intl.formatMessage(messages.requestmoviesinservice, {
                   count: selectedParts.length,
                   label: serviceLabel ?? '',
@@ -310,7 +334,7 @@ const CollectionRequestModal = ({
                   }
                 )
       }
-      okDisabled={selectedParts.length === 0}
+      okDisabled={selectedParts.length === 0 || version.missing}
       okButtonType={'primary'}
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
     >
@@ -334,7 +358,10 @@ const CollectionRequestModal = ({
           }
         />
       )}
-      <div className="flex flex-col">
+      {version.showPicker && (
+        <VersionPicker {...version.pickerProps} showStatus={false} />
+      )}
+      <div className={`flex flex-col ${version.missing ? 'hidden' : ''}`}>
         <div className="-mx-4 sm:mx-0">
           <div className="inline-block min-w-full py-2 align-middle">
             <div className="overflow-hidden border border-gray-700 backdrop-blur sm:rounded-lg">
@@ -401,7 +428,7 @@ const CollectionRequestModal = ({
                         partStatus !== MediaStatus.UNKNOWN &&
                         partStatus !== MediaStatus.DELETED;
                       const serviceStatuses = getLabelledServices(services)
-                        .filter((service) => service.id !== serverId)
+                        .filter((service) => service.id !== requestServerId)
                         .map((service) => ({
                           service,
                           status: getMediaServiceStatus(
@@ -574,8 +601,11 @@ const CollectionRequestModal = ({
         <AdvancedRequester
           type="movie"
           is4k={is4k}
-          serverFixed={serverId != null}
-          defaultOverrides={serverId != null ? { server: serverId } : undefined}
+          key={version.pickerProps.selected ?? 'none'}
+          serverFixed={requestServerId != null}
+          defaultOverrides={
+            requestServerId != null ? { server: requestServerId } : undefined
+          }
           onChange={(overrides) => {
             setRequestOverrides(overrides);
           }}

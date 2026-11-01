@@ -3,10 +3,15 @@ import Modal from '@app/components/Common/Modal';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
 import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
+import VersionPicker, {
+  versionPickerMessages,
+} from '@app/components/RequestModal/VersionPicker';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
+import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
@@ -71,6 +76,15 @@ const MovieRequestModal = ({
       ? `/api/v1/user/${requestOverrides?.user?.id ?? user.id}/quota`
       : null
   );
+  const version = useVersionChoice({
+    mediaType: 'movie',
+    media: data?.mediaInfo,
+    isAnime: data?.keywords.some((keyword) => keyword.id === ANIME_KEYWORD_ID),
+    enabled: serverId == null && !is4k && !editRequest,
+    onChange: () => setRequestOverrides(null),
+  });
+  const requestServerId = serverId ?? version.serverId;
+  const commitVersion = version.commit;
 
   useEffect(() => {
     if (onUpdating) {
@@ -96,7 +110,9 @@ const MovieRequestModal = ({
         mediaId: data?.id,
         mediaType: 'movie',
         is4k,
-        ...(serverId != null ? { serverId, isServiceRequest: true } : {}),
+        ...(requestServerId != null
+          ? { serverId: requestServerId, isServiceRequest: true }
+          : {}),
         ignoreQuota: requestOverrides?.ignoreQuota,
         ...overrideParams,
       });
@@ -104,6 +120,7 @@ const MovieRequestModal = ({
       mutate('/api/v1/request/count');
 
       if (response.data) {
+        commitVersion();
         if (onComplete) {
           onComplete(
             hasPermission(
@@ -141,7 +158,8 @@ const MovieRequestModal = ({
     data?.id,
     data?.title,
     is4k,
-    serverId,
+    requestServerId,
+    commitVersion,
     onComplete,
     addToast,
     intl,
@@ -326,12 +344,13 @@ const MovieRequestModal = ({
 
   return (
     <Modal
-      loading={(!data && !error) || !quota}
+      loading={(!data && !error) || !quota || version.loading}
       backgroundClickable
       onCancel={onCancel}
       onOk={sendRequest}
       okDisabled={
         isUpdating ||
+        version.missing ||
         (quota?.movie.restricted && !requestOverrides?.ignoreQuota)
       }
       title={intl.formatMessage(
@@ -341,9 +360,11 @@ const MovieRequestModal = ({
       okText={
         isUpdating
           ? intl.formatMessage(globalMessages.requesting)
-          : intl.formatMessage(
-              is4k ? globalMessages.request4k : globalMessages.request
-            )
+          : version.missing
+            ? intl.formatMessage(versionPickerMessages.chooseversionbutton)
+            : intl.formatMessage(
+                is4k ? globalMessages.request4k : globalMessages.request
+              )
       }
       okButtonType={'primary'}
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
@@ -367,17 +388,21 @@ const MovieRequestModal = ({
           }
         />
       )}
+      {version.showPicker && <VersionPicker {...version.pickerProps} />}
       {hasPermission(
         [Permission.REQUEST_ADVANCED, Permission.MANAGE_REQUESTS],
         { type: 'or' }
       ) && (
         <AdvancedRequester
+          key={version.pickerProps.selected ?? 'none'}
           tmdbId={tmdbId}
           type="movie"
           is4k={is4k}
           quota={quota}
-          serverFixed={serverId != null}
-          defaultOverrides={serverId != null ? { server: serverId } : undefined}
+          serverFixed={requestServerId != null}
+          defaultOverrides={
+            requestServerId != null ? { server: requestServerId } : undefined
+          }
           onChange={(overrides) => {
             setRequestOverrides(overrides);
           }}

@@ -5,6 +5,7 @@ import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { getLabelledServices } from '@app/utils/serviceRequestStatus';
+import { getVersionChoices } from '@app/utils/versionChoices';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import {
   CheckIcon,
@@ -37,7 +38,6 @@ const messages = defineMessages('components.RequestButton', {
     'Approve {requestCount, plural, one {4K Request} other {{requestCount} 4K Requests}}',
   decline4krequests:
     'Decline {requestCount, plural, one {4K Request} other {{requestCount} 4K Requests}}',
-  requestinservice: 'Request {label} Version',
   viewrequestinservice: 'View {label} Request',
   approverequestinservice: 'Approve {label} Request',
   declinerequestinservice: 'Decline {label} Request',
@@ -293,43 +293,47 @@ const RequestButton = ({
   const applicableServices = getLabelledServices(allServices).filter(
     (service) => !service.animeOnly || isAnime
   );
-  // Standard request button
-  if (
-    (!media ||
-      media.status === MediaStatus.UNKNOWN ||
-      (media.status === MediaStatus.DELETED && !activeRequest)) &&
-    hasPermission(
-      [
-        Permission.REQUEST,
-        mediaType === 'movie'
-          ? Permission.REQUEST_MOVIE
-          : Permission.REQUEST_TV,
-      ],
-      { type: 'or' }
-    )
-  ) {
-    buttons.push({
-      id: 'request',
-      text: intl.formatMessage(globalMessages.request),
-      action: () => {
-        setEditRequest(false);
-        setShowRequestModal(true);
-      },
-      svg: <ArrowDownTrayIcon />,
-    });
-  } else if (
+  const standardRequestOpen =
+    !media ||
+    media.status === MediaStatus.UNKNOWN ||
+    (media.status === MediaStatus.DELETED && !activeRequest);
+  const standardRequestMoreOpen =
     mediaType === 'tv' &&
     (!activeRequest || activeRequest.requestedBy.id !== user?.id) &&
-    hasPermission([Permission.REQUEST, Permission.REQUEST_TV], {
-      type: 'or',
-    }) &&
-    media &&
+    !!media &&
     media.status !== MediaStatus.BLOCKLISTED &&
-    !isShowComplete
-  ) {
+    !isShowComplete;
+  // VSeerr: one Request button. The request dialog lets the user choose
+  // the version, and closes versions other than the one they requested.
+  const versionChoices = getVersionChoices({
+    mediaType,
+    media,
+    services: allServices,
+    isAnime,
+    userId: user?.id,
+    grants: user?.requestServices ?? [],
+    isManager: hasPermission(Permission.MANAGE_REQUESTS),
+    standardRequestable: standardRequestOpen || standardRequestMoreOpen,
+  });
+  const canRequest = hasPermission(
+    [
+      Permission.REQUEST,
+      mediaType === 'movie' ? Permission.REQUEST_MOVIE : Permission.REQUEST_TV,
+    ],
+    { type: 'or' }
+  );
+  const onlyStandardRequestable = versionChoices.every(
+    (choice, index) => (index === 0) === choice.requestable
+  );
+  // Standard request button
+  if (canRequest && versionChoices.some((choice) => choice.requestable)) {
+    const requestMore =
+      mediaType === 'tv' && !standardRequestOpen && onlyStandardRequestable;
     buttons.push({
-      id: 'request-more',
-      text: intl.formatMessage(messages.requestmore),
+      id: requestMore ? 'request-more' : 'request',
+      text: intl.formatMessage(
+        requestMore ? messages.requestmore : globalMessages.request
+      ),
       action: () => {
         setEditRequest(false);
         setShowRequestModal(true);
@@ -463,28 +467,6 @@ const RequestButton = ({
           }
         );
       }
-    } else if (
-      hasPermission(
-        [
-          Permission.REQUEST,
-          mediaType === 'movie'
-            ? Permission.REQUEST_MOVIE
-            : Permission.REQUEST_TV,
-        ],
-        { type: 'or' }
-      )
-    ) {
-      buttons.push({
-        id: `request-service-${service.id}`,
-        text: intl.formatMessage(messages.requestinservice, {
-          label: service.buttonLabel,
-        }),
-        action: () => {
-          setEditRequest(false);
-          setActiveServiceModal({ serverId: service.id, show: true });
-        },
-        svg: <ArrowDownTrayIcon />,
-      });
     }
   }
 

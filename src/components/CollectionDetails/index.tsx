@@ -44,7 +44,6 @@ const messages = defineMessages('components.CollectionDetails', {
     '{removeLabel} ({count, plural, one {# movie} other {# movies}})',
   requestcollection: 'Request Collection',
   requestcollection4k: 'Request Collection in 4K',
-  requestcollectioninservice: 'Request Collection ({label} Version)',
   statusinservice: '{label}: {status}',
 });
 
@@ -276,7 +275,8 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
     serverId?: number;
   }[] = [];
 
-  if (hasRequestable) {
+  // VSeerr: one Request button; the dialog lets the user choose the version.
+  if (hasRequestable || requestableServices.length > 0) {
     requestOptions.push({
       id: 'request',
       text: intl.formatMessage(messages.requestcollection),
@@ -289,17 +289,6 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
       id: 'request-4k',
       text: intl.formatMessage(messages.requestcollection4k),
       is4k: true,
-    });
-  }
-
-  for (const service of requestableServices) {
-    requestOptions.push({
-      id: `request-service-${service.id}`,
-      text: intl.formatMessage(messages.requestcollectioninservice, {
-        label: service.buttonLabel,
-      }),
-      is4k: false,
-      serverId: service.id,
     });
   }
 
