@@ -92,7 +92,7 @@ const AdvancedRequester = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const { user: currentUser, hasPermission: currentHasPermission } = useUser();
-  const { data, error } = useSWR<ServiceCommonServer[]>(
+  const { data: allServers, error } = useSWR<ServiceCommonServer[]>(
     `/api/v1/service/${type === 'movie' ? 'radarr' : 'sonarr'}`,
     {
       refreshInterval: 0,
@@ -101,6 +101,25 @@ const AdvancedRequester = ({
       revalidateOnMount: true,
     }
   );
+  // VSeerr: servers with a version name are versions, chosen in the version
+  // picker. A standard request goes to the other servers, so versions are
+  // left out of Destination Server (unless every server is a version). A
+  // fixed server (a version request) keeps the full list.
+  const data = useMemo(() => {
+    if (serverFixed || !allServers) {
+      return allServers;
+    }
+    const isVersion = (server: ServiceCommonServer) =>
+      !!server.buttonLabel?.trim();
+    const hasStandard = allServers.some(
+      (server) => server.is4k === is4k && !isVersion(server)
+    );
+    return hasStandard
+      ? allServers.filter(
+          (server) => server.is4k !== is4k || !isVersion(server)
+        )
+      : allServers;
+  }, [allServers, serverFixed, is4k]);
   const [selectedServer, setSelectedServer] = useState<number | null>(
     defaultOverrides?.server !== undefined && defaultOverrides?.server >= 0
       ? defaultOverrides?.server

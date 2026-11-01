@@ -18,6 +18,7 @@ import { getSettings } from '@server/lib/settings';
 import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
+import { isVersionDestination } from '@server/lib/versions';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -216,6 +217,21 @@ export class MediaRequest {
     ) {
       throw new InvalidServiceRequestError(
         'Service-specific requests must target a configured server.'
+      );
+    }
+
+    // VSeerr: a version's server is requested as that version, never as the
+    // destination of a standard request.
+    if (
+      !isServiceSpecific &&
+      isVersionDestination(
+        requestBody.mediaType,
+        requestBody.serverId,
+        !!requestBody.is4k
+      )
+    ) {
+      throw new InvalidServiceRequestError(
+        'This server is a version. Request it as that version instead.'
       );
     }
 
