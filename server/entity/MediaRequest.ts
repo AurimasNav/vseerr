@@ -17,7 +17,10 @@ import {
   standardOptionServer,
 } from '@server/lib/requestOptions';
 import { getSettings } from '@server/lib/settings';
-import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
+import {
+  requestNotificationLabel,
+  withVersion,
+} from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
 import { isVersionDestination } from '@server/lib/versions';
@@ -996,7 +999,7 @@ export class MediaRequest {
 
       // VSeerr: name the version, e.g. "Movie Request Approved in German".
       if (event) {
-        event = withVersion(event, requestVersionLabel(entity));
+        event = withVersion(event, await requestNotificationLabel(entity));
       }
 
       if (entity.type === MediaType.MOVIE) {
