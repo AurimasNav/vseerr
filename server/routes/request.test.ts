@@ -1690,7 +1690,16 @@ describe('POST /request, per-service slots', () => {
       .send({ mediaType: 'movie', mediaId: 99901, serverId: 0 });
     assert.strictEqual(advanced.status, 409);
 
-    const service = await friend.post('/request').send({
+    // One version of each title per user: the friend holds the standard one.
+    const friendService = await friend.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 99901,
+      serverId: 0,
+      isServiceRequest: true,
+    });
+    assert.strictEqual(friendService.status, 409);
+
+    const service = await admin.post('/request').send({
       mediaType: 'movie',
       mediaId: 99901,
       serverId: 0,
@@ -1699,7 +1708,7 @@ describe('POST /request, per-service slots', () => {
     assert.strictEqual(service.status, 201);
     assert.strictEqual(service.body.isServiceRequest, true);
 
-    const duplicateService = await friend.post('/request').send({
+    const duplicateService = await admin.post('/request').send({
       mediaType: 'movie',
       mediaId: 99901,
       serverId: 0,
@@ -1707,7 +1716,7 @@ describe('POST /request, per-service slots', () => {
     });
     assert.strictEqual(duplicateService.status, 409);
 
-    const otherService = await friend.post('/request').send({
+    const otherService = await admin.post('/request').send({
       mediaType: 'movie',
       mediaId: 99901,
       serverId: 1,
@@ -1905,7 +1914,7 @@ describe('POST /request, per-service slots', () => {
       ]);
     });
 
-    it(`lets the same user request a ${mediaType} in Italian after requesting it in English`, async () => {
+    it(`stops the same user requesting a ${mediaType} in Italian after requesting it in English`, async () => {
       configureLanguageServers();
       await grantServices('demo@seerr.dev', [
         `${service}:${ENGLISH}`,
@@ -1916,19 +1925,13 @@ describe('POST /request, per-service slots', () => {
       const english = await userX.post('/request').send(requestIn(ENGLISH));
       assert.strictEqual(english.status, 201);
 
+      // One version of each title per user, except request managers.
       const italian = await userX.post('/request').send(requestIn(ITALIAN));
-      assert.strictEqual(italian.status, 201);
+      assert.strictEqual(italian.status, 409);
 
       assert.deepStrictEqual(await findServiceRequests(99950, mediaType), [
         {
           serverId: ENGLISH,
-          isServiceRequest: true,
-          status: MediaRequestStatus.PENDING,
-          requestedBy: 'demo@seerr.dev',
-          seasons: seasons ?? [],
-        },
-        {
-          serverId: ITALIAN,
           isServiceRequest: true,
           status: MediaRequestStatus.PENDING,
           requestedBy: 'demo@seerr.dev',
@@ -1966,10 +1969,13 @@ describe('POST /request, per-service slots', () => {
     });
 
     it('only checks seasons against requests for the same server', async () => {
-      await grantServices('demo@seerr.dev', ['sonarr:0', 'sonarr:1']);
+      // Someone else holds the English version; a user requests one
+      // version of each title.
+      await grantServices('demo@seerr.dev', ['sonarr:1']);
       const owner = await loginAs('demo@seerr.dev', 'test1234');
+      const admin = await loginAs('admin@seerr.dev', 'test1234');
 
-      const english = await owner.post('/request').send(tvRequestIn(0, [1, 2]));
+      const english = await admin.post('/request').send(tvRequestIn(0, [1, 2]));
       assert.strictEqual(english.status, 201);
 
       const italian = await owner.post('/request').send(tvRequestIn(1, [1]));

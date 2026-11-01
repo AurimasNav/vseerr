@@ -10,6 +10,7 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
@@ -266,6 +267,24 @@ export class MediaRequest {
       ) {
         media.status4k = MediaStatus.PENDING;
       }
+    }
+
+    // VSeerr: one version of each title per user, except for request managers.
+    if (
+      media.id &&
+      !requestBody.is4k &&
+      !user.hasPermission(Permission.MANAGE_REQUESTS) &&
+      (await holdsOtherVersion(requestRepository, {
+        mediaId: media.id,
+        userId: requestUser.id,
+        serverId: isServiceSpecific
+          ? (requestBody.serverId ?? undefined)
+          : undefined,
+      }))
+    ) {
+      throw new DuplicateMediaRequestError(
+        'You already requested another version of this title.'
+      );
     }
 
     const existingQuery = requestRepository

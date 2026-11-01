@@ -15,9 +15,9 @@ Seerr tracks each title once: a movie or show is either requested or it is not. 
 VSeerr adds versions:
 
 - An administrator connects several Radarr or Sonarr instances and gives each one a version name and a default quality profile, for example "German", "Best quality" or "Kids".
-- When requesting, a user first picks a version, then any quality profile of that instance.
+- When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the default on each device.
 - Each version tracks its own requests and availability, so a title can exist once per version.
-- Administrators choose which users can request which versions.
+- Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
 
 Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VSeerr. A "German" version is a Radarr instance whose profiles prefer German audio. Its profiles can still differ, for example one with a 720p cutoff and one with a 1080p cutoff.
 
