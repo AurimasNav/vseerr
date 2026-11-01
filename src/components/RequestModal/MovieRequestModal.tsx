@@ -117,7 +117,9 @@ const MovieRequestModal = ({
               isServiceRequest: true,
               ...(requestOption ? { requestOption } : {}),
             }
-          : {}),
+          : requestOption
+            ? { requestOption }
+            : {}),
         ignoreQuota: requestOverrides?.ignoreQuota,
         ...overrideParams,
       });

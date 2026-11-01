@@ -188,35 +188,37 @@ const VersionPicker = ({
             </div>
           );
         })}
-      <div
-        className={`mt-3 flex items-start gap-3 ${
-          selected ? '' : 'opacity-60'
-        }`}
-      >
-        <input
-          id="version-choice-default"
-          type="checkbox"
-          className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-500 bg-gray-800 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
-          checked={useByDefault}
-          disabled={!selected}
-          aria-describedby="version-choice-default-description"
-          onChange={(e) => onUseByDefaultChange(e.target.checked)}
-        />
-        <div className="flex flex-col">
-          <label
-            htmlFor="version-choice-default"
-            className="cursor-pointer text-sm text-gray-100"
-          >
-            {intl.formatMessage(messages.usebydefault)}
-          </label>
-          <span
-            id="version-choice-default-description"
-            className="text-xs text-gray-400"
-          >
-            {intl.formatMessage(messages.usebydefaultdescription)}
-          </span>
+      {choices.length > 1 && (
+        <div
+          className={`mt-3 flex items-start gap-3 ${
+            selected ? '' : 'opacity-60'
+          }`}
+        >
+          <input
+            id="version-choice-default"
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-500 bg-gray-800 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+            checked={useByDefault}
+            disabled={!selected}
+            aria-describedby="version-choice-default-description"
+            onChange={(e) => onUseByDefaultChange(e.target.checked)}
+          />
+          <div className="flex flex-col">
+            <label
+              htmlFor="version-choice-default"
+              className="cursor-pointer text-sm text-gray-100"
+            >
+              {intl.formatMessage(messages.usebydefault)}
+            </label>
+            <span
+              id="version-choice-default-description"
+              className="text-xs text-gray-400"
+            >
+              {intl.formatMessage(messages.usebydefaultdescription)}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
     </fieldset>
   );
 };

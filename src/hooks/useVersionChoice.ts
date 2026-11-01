@@ -71,7 +71,9 @@ const useVersionChoice = ({
   const remembered = getRememberedVersion(user?.id, mediaType);
   const selected = picked ?? initialVersionChoice(choices, remembered);
   const choice = choices.find((c) => c.key === selected);
-  const showPicker = choices.length > 1;
+  // A single version is still shown when it has options to tick.
+  const showPicker =
+    choices.length > 1 || (choices[0]?.options.length ?? 0) > 0;
   const useByDefault =
     useByDefaultChoice ?? (!!selected && selected === remembered);
   const rememberedOption = getRememberedOption(user?.id, mediaType, selected);

@@ -7,7 +7,7 @@ import { useIntl } from 'react-intl';
 const messages = defineMessages('components.Settings.RequestOptionsEditor', {
   requestOptions: 'Request Options',
   requestOptionsHelp:
-    'Extra checkboxes shown under this version when requesting. A ticked option requests with its quality profile.',
+    'Extra checkboxes shown under this version when requesting. A ticked option requests with its quality profile. On the default server without a version name they show under Standard.',
   label: 'Label',
   labelPlaceholder: 'English is OK until a dub appears',
   profile: 'Quality Profile',
@@ -17,14 +17,16 @@ const messages = defineMessages('components.Settings.RequestOptionsEditor', {
     'Otherwise the default profile is used, e.g. to avoid a second English copy.',
   addOption: 'Add Option',
   removeOption: 'Remove',
-  noVersionName: 'Set a version name to offer request options.',
+  noVersionName: 'Request options need a version name on 4K servers.',
+  animeOnly: 'Anime only',
+  animeOnlyHelp: 'Offered only for titles TMDB tags as anime.',
 });
 
 interface RequestOptionsEditorProps {
   value: RequestOption[];
   onChange: (value: RequestOption[]) => void;
   profiles: { id: number; name: string }[];
-  /** Options only show for versions (servers with a version name). */
+  /** Versions and non-4K servers without a version name can have options. */
   hasVersionName: boolean;
 }
 
@@ -94,6 +96,25 @@ const RequestOptionsEditor = ({
                   </option>
                 )}
             </select>
+            <div className="flex items-center gap-3">
+              <label className="flex items-start gap-2 text-sm text-gray-100">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!option.animeOnly}
+                  disabled={!hasVersionName}
+                  onChange={(e) =>
+                    update(index, { animeOnly: e.target.checked || undefined })
+                  }
+                />
+                <span className="flex flex-col">
+                  {intl.formatMessage(messages.animeOnly)}
+                  <span className="text-xs text-gray-400">
+                    {intl.formatMessage(messages.animeOnlyHelp)}
+                  </span>
+                </span>
+              </label>
+            </div>
             <div className="flex items-center justify-between gap-3">
               <label className="flex items-start gap-2 text-sm text-gray-100">
                 <input

@@ -110,6 +110,8 @@ export interface RequestOption {
    * available or downloading); otherwise the default profile is used.
    */
   onlyIfNoOtherVersion: boolean;
+  /** Only offered for anime (TMDB keyword "anime"). */
+  animeOnly?: boolean;
 }
 
 export interface RadarrSettings extends DVRSettings {
