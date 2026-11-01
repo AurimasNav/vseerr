@@ -54,6 +54,8 @@ const messages = defineMessages('components.RequestModal', {
   autoapproval: 'Automatic Approval',
   requesterror: 'Something went wrong while submitting the request.',
   pendingapproval: 'Your request is pending approval.',
+  coveredby: 'Covered by {version}',
+  requestedvia: 'Requested in {version}',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -111,6 +113,19 @@ const TvRequestModal = ({
     },
   });
   const requestServerId = serverId ?? version.serverId;
+
+  // VSeerr: seasons another version covers (or may cover, while its request
+  // is under a day old). Users without Manage Requests can't request them.
+  const versionKey =
+    requestServerId != null ? `sonarr:${requestServerId}` : 'standard';
+  const seasonCoverage =
+    version.coverage.find((c) => c.key === versionKey)?.seasons ?? {};
+  const isCoverageClosed = (seasonNumber: number) =>
+    !hasPermission(Permission.MANAGE_REQUESTS) &&
+    !!(
+      seasonCoverage[seasonNumber]?.coveredBy ||
+      seasonCoverage[seasonNumber]?.requestedVia
+    );
 
   // Requests and season statuses of the version being requested.
   const isSlotRequest = (request: NonFunctionProperties<MediaRequest>) =>
@@ -315,7 +330,14 @@ const TvRequestModal = ({
       );
     });
 
-    return [...requestedSeasons, ...availableSeasons];
+    const coveredSeasons = getAllSeasons().filter(
+      (seasonNumber) =>
+        isCoverageClosed(seasonNumber) &&
+        !requestedSeasons.includes(seasonNumber) &&
+        !availableSeasons.includes(seasonNumber)
+    );
+
+    return [...requestedSeasons, ...availableSeasons, ...coveredSeasons];
   };
 
   const isSelectedSeason = (seasonNumber: number): boolean =>
@@ -717,13 +739,39 @@ const TvRequestModal = ({
                             {season.episodeCount}
                           </td>
                           <td className="whitespace-nowrap py-4 pr-2 text-sm leading-5 text-gray-200 md:px-6">
-                            {!seasonRequest && !mediaSeason && (
-                              <Badge>
-                                {intl.formatMessage(
-                                  globalMessages.notrequested
-                                )}
-                              </Badge>
-                            )}
+                            {!seasonRequest &&
+                              !mediaSeason &&
+                              !seasonCoverage[season.seasonNumber] && (
+                                <Badge>
+                                  {intl.formatMessage(
+                                    globalMessages.notrequested
+                                  )}
+                                </Badge>
+                              )}
+                            {!seasonRequest &&
+                              !mediaSeason &&
+                              seasonCoverage[season.seasonNumber] && (
+                                <Badge badgeType="success">
+                                  {(() => {
+                                    const state =
+                                      seasonCoverage[season.seasonNumber];
+                                    const ref =
+                                      state.coveredBy ?? state.requestedVia;
+                                    return intl.formatMessage(
+                                      state.coveredBy
+                                        ? messages.coveredby
+                                        : messages.requestedvia,
+                                      {
+                                        version:
+                                          ref?.label ??
+                                          intl.formatMessage(
+                                            versionPickerMessages.standard
+                                          ),
+                                      }
+                                    );
+                                  })()}
+                                </Badge>
+                              )}
                             {!mediaSeason &&
                               seasonRequest?.status ===
                                 MediaRequestStatus.PENDING && (

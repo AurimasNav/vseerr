@@ -1,8 +1,13 @@
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { listCustomFormats } from '@server/lib/mediaVersions';
 import { sanitizeRequestOptions } from '@server/lib/requestOptions';
 import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import {
+  sanitizeDefiningFormats,
+  sanitizeDefiningMatch,
+} from '@server/lib/versionCoverage';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -19,6 +24,10 @@ sonarrRoutes.post('/', async (req, res) => {
 
   const newSonarr = req.body as SonarrSettings;
   newSonarr.requestOptions = sanitizeRequestOptions(newSonarr.requestOptions);
+  newSonarr.definingFormats = sanitizeDefiningFormats(
+    newSonarr.definingFormats
+  );
+  newSonarr.definingMatch = sanitizeDefiningMatch(newSonarr.definingMatch);
   const lastItem = settings.sonarr[settings.sonarr.length - 1];
   newSonarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -55,6 +64,11 @@ sonarrRoutes.post('/test', async (req, res, next) => {
     const languageProfiles =
       sonarrMajorVersion <= 3 ? await sonarr.getLanguageProfiles() : null;
     const tags = await sonarr.getTags();
+    // VSeerr: format names and suggestions for defining formats.
+    const { customFormats, definingSuggestions } = await listCustomFormats(
+      req.body,
+      'sonarr'
+    ).catch(() => ({ customFormats: [], definingSuggestions: {} }));
 
     return res.status(200).json({
       profiles,
@@ -65,6 +79,8 @@ sonarrRoutes.post('/test', async (req, res, next) => {
       languageProfiles,
       tags,
       urlBase,
+      customFormats,
+      definingSuggestions,
     });
   } catch (e) {
     logger.error('Failed to test Sonarr', {
@@ -104,6 +120,8 @@ sonarrRoutes.put<{ id: string }>('/:id', async (req, res) => {
     ...req.body,
     id: Number(req.params.id),
     requestOptions: sanitizeRequestOptions(req.body.requestOptions),
+    definingFormats: sanitizeDefiningFormats(req.body.definingFormats),
+    definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
   } as SonarrSettings;
   await settings.save();
 

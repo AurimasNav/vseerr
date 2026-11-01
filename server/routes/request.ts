@@ -9,6 +9,7 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import {
   BlocklistedMediaError,
+  CoveredByVersionError,
   DuplicateMediaRequestError,
   InvalidServiceRequestError,
   MediaRequest,
@@ -355,6 +356,7 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
         case QuotaRestrictedError:
           return next({ status: 403, message: error.message });
         case DuplicateMediaRequestError:
+        case CoveredByVersionError:
           return next({ status: 409, message: error.message });
         case NoSeasonsAvailableError:
           return next({ status: 202, message: error.message });

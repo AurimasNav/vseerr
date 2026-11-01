@@ -19,6 +19,9 @@ const messages = defineMessages('components.RequestModal.VersionPicker', {
   optionremembered: 'Remembered on this device for this version.',
   optionnotapplied:
     'Another version already has this title, so this does not apply now.',
+  coveredby: 'Already available through {version}.',
+  requestedvia:
+    'Just requested in {version}, which may cover this version. It opens again within a day if it does not.',
 });
 
 interface VersionPickerProps {
@@ -102,6 +105,25 @@ const VersionPicker = ({
                       {intl.formatMessage(messages.otherversionheld)}
                     </span>
                   )}
+                  {choice.coveredBy !== undefined && (
+                    <span className="text-xs text-gray-400">
+                      {intl.formatMessage(messages.coveredby, {
+                        version:
+                          choice.coveredBy ??
+                          intl.formatMessage(messages.standard),
+                      })}
+                    </span>
+                  )}
+                  {choice.coveredBy === undefined &&
+                    choice.requestedVia !== undefined && (
+                      <span className="text-xs text-gray-400">
+                        {intl.formatMessage(messages.requestedvia, {
+                          version:
+                            choice.requestedVia ??
+                            intl.formatMessage(messages.standard),
+                        })}
+                      </span>
+                    )}
                 </span>
               </span>
               {showStatus && (

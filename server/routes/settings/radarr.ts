@@ -1,8 +1,13 @@
 import RadarrAPI from '@server/api/servarr/radarr';
+import { listCustomFormats } from '@server/lib/mediaVersions';
 import { sanitizeRequestOptions } from '@server/lib/requestOptions';
 import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import {
+  sanitizeDefiningFormats,
+  sanitizeDefiningMatch,
+} from '@server/lib/versionCoverage';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -19,6 +24,10 @@ radarrRoutes.post('/', async (req, res) => {
 
   const newRadarr = req.body as RadarrSettings;
   newRadarr.requestOptions = sanitizeRequestOptions(newRadarr.requestOptions);
+  newRadarr.definingFormats = sanitizeDefiningFormats(
+    newRadarr.definingFormats
+  );
+  newRadarr.definingMatch = sanitizeDefiningMatch(newRadarr.definingMatch);
   const lastItem = settings.radarr[settings.radarr.length - 1];
   newRadarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -57,6 +66,11 @@ radarrRoutes.post<
     const profiles = await radarr.getProfiles();
     const folders = await radarr.getRootFolders();
     const tags = await radarr.getTags();
+    // VSeerr: format names and suggestions for defining formats.
+    const { customFormats, definingSuggestions } = await listCustomFormats(
+      req.body,
+      'radarr'
+    ).catch(() => ({ customFormats: [], definingSuggestions: {} }));
 
     return res.status(200).json({
       profiles,
@@ -66,6 +80,8 @@ radarrRoutes.post<
       })),
       tags,
       urlBase,
+      customFormats,
+      definingSuggestions,
     });
   } catch (e) {
     logger.error('Failed to test Radarr', {
@@ -105,6 +121,8 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
       ...req.body,
       id: Number(req.params.id),
       requestOptions: sanitizeRequestOptions(req.body.requestOptions),
+      definingFormats: sanitizeDefiningFormats(req.body.definingFormats),
+      definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
     } as RadarrSettings;
     await settings.save();
 

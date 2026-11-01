@@ -13,6 +13,7 @@ import type {
   MediaResultsResponse,
   MediaWatchDataResponse,
 } from '@server/interfaces/api/mediaInterfaces';
+import { getMediaVersions } from '@server/lib/mediaVersions';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { isVersionRequestSql } from '@server/lib/versionSql';
@@ -351,6 +352,30 @@ mediaRoutes.delete(
     }
   }
 );
+
+// VSeerr: what each version's files contain and which versions cover each
+// other. Every signed-in user may read it; it carries no paths or keys.
+mediaRoutes.get<{ id: string }>('/:id/versions', async (req, res, next) => {
+  const media = await getRepository(Media).findOne({
+    where: { id: Number(req.params.id) },
+    relations: { requests: true },
+  });
+
+  if (!media) {
+    return next({ status: 404, message: 'Media does not exist.' });
+  }
+
+  try {
+    return res.status(200).json(await getMediaVersions(media));
+  } catch (e) {
+    logger.error('Failed to read media versions', {
+      label: 'Media',
+      mediaId: media.id,
+      errorMessage: e.message,
+    });
+    return next({ status: 500, message: 'Failed to read media versions.' });
+  }
+});
 
 mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
   '/:id/watch_data',

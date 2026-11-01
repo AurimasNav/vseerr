@@ -80,6 +80,13 @@ export interface DVRTestResponse {
     label: string;
   }[];
   urlBase?: string;
+  /** VSeerr: custom format names, for defining formats. */
+  customFormats?: string[];
+  /** VSeerr: suggested defining formats per quality profile id. */
+  definingSuggestions?: Record<
+    number,
+    { formats: string[]; match: 'all' | 'any' }
+  >;
 }
 
 export type RadarrTestResponse = DVRTestResponse;
