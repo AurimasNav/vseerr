@@ -24,6 +24,33 @@ const settingsForVersions = (): VersionSettings => {
   };
 };
 
+/**
+ * Whether a standard request may not go to this server: it is a version (a
+ * server with a version name) and a server without a version name exists
+ * for the same 4K setting. Setups where every server is a version keep
+ * Seerr's behaviour.
+ */
+export const isVersionDestination = (
+  mediaType: 'movie' | 'tv',
+  serverId: number | null | undefined,
+  is4k: boolean,
+  settings: Pick<VersionSettings, 'radarr' | 'sonarr'> = settingsForVersions()
+): boolean => {
+  if (serverId == null) {
+    return false;
+  }
+  const servers = (
+    mediaType === 'movie' ? settings.radarr : settings.sonarr
+  ) as { id: number; buttonLabel?: string; is4k?: boolean }[];
+  const sameKind = servers.filter((server) => !!server.is4k === is4k);
+  return (
+    sameKind.some((server) => !server.buttonLabel?.trim()) &&
+    sameKind.some(
+      (server) => server.id === serverId && !!server.buttonLabel?.trim()
+    )
+  );
+};
+
 /** Version identifiers that exist in the given settings. */
 export const configuredVersions = (settings: VersionSettings): string[] => [
   ...settings.radarr

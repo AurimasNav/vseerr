@@ -2109,3 +2109,69 @@ describe('POST /request, version request options', () => {
     assert.strictEqual(res.body.profileId, 8);
   });
 });
+
+describe('POST/PUT /request, version servers as destination', () => {
+  it('rejects a standard request sent to a version server', async () => {
+    configureRadarr([
+      { id: 0, isDefault: true },
+      { id: 1, buttonLabel: 'German' },
+    ]);
+    getSettings().sonarr = [];
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 88101,
+      serverId: 1,
+    });
+
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.message, /is a version/);
+    assert.strictEqual(
+      await getRepository(MediaRequest).count({ where: { serverId: 1 } }),
+      0
+    );
+  });
+
+  it('accepts a standard request sent to another standard server', async () => {
+    configureRadarr([
+      { id: 0, isDefault: true },
+      { id: 1, name: 'Second' },
+      { id: 2, buttonLabel: 'German' },
+    ]);
+    getSettings().sonarr = [];
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: MediaType.MOVIE,
+      mediaId: 88102,
+      serverId: 1,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.serverId, 1);
+  });
+
+  it('refuses to move a standard request onto a version server', async () => {
+    configureRadarr([
+      { id: 0, isDefault: true },
+      { id: 3, buttonLabel: 'German' },
+    ]);
+    const mediaRequest = await seedRequest();
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.put(`/request/${mediaRequest.id}`).send({
+      mediaType: MediaType.MOVIE,
+      serverId: 3,
+      profileId: 7,
+      rootFolder: '/updated/movies',
+      tags: [],
+    });
+
+    assert.strictEqual(res.status, 400);
+    const saved = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: mediaRequest.id },
+    });
+    assert.notStrictEqual(saved.serverId, 3);
+  });
+});

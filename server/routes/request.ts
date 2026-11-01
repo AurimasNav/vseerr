@@ -26,6 +26,7 @@ import type {
 } from '@server/interfaces/api/requestInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { isVersionDestination } from '@server/lib/versions';
 import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -543,6 +544,21 @@ requestRoutes.put<{ requestId: string }>(
           return next({
             status: 400,
             message: 'The server of a service request cannot be changed.',
+          });
+        }
+
+        if (
+          !request.isServiceRequest &&
+          isVersionDestination(
+            req.body.mediaType,
+            req.body.serverId,
+            request.is4k
+          )
+        ) {
+          return next({
+            status: 400,
+            message:
+              'This server is a version. Request it as that version instead.',
           });
         }
 
