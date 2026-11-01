@@ -3,11 +3,14 @@ import { describe, it } from 'node:test';
 
 import { MediaStatus } from '@server/constants/media';
 import {
+  isAnimeTitle,
   MAX_REQUEST_OPTIONS,
+  optionsForTitle,
   otherVersionHasTitle,
   publicRequestOptions,
   requestOptionProfile,
   sanitizeRequestOptions,
+  standardOptionServer,
 } from '@server/lib/requestOptions';
 
 describe('sanitizeRequestOptions', () => {
@@ -189,5 +192,60 @@ describe('requestOptionProfile', () => {
 
   it('is undefined without an option', () => {
     assert.strictEqual(requestOptionProfile(undefined, false), undefined);
+  });
+});
+
+describe('anime-only options', () => {
+  it('keeps the flag through sanitizing and the public view', () => {
+    const [option] = sanitizeRequestOptions([
+      { label: 'English dub only', profileId: 13, animeOnly: true },
+    ]);
+    assert.strictEqual(option.animeOnly, true);
+    assert.deepStrictEqual(publicRequestOptions([option]), [
+      {
+        id: 'english-dub-only',
+        label: 'English dub only',
+        onlyIfNoOtherVersion: false,
+        animeOnly: true,
+      },
+    ]);
+  });
+
+  it('leaves anime-only options out for other titles', () => {
+    const options = [
+      { id: 'a', animeOnly: true },
+      { id: 'b', animeOnly: false },
+      { id: 'c' },
+    ];
+    assert.deepStrictEqual(
+      optionsForTitle(options, false).map((o) => o.id),
+      ['b', 'c']
+    );
+    assert.strictEqual(optionsForTitle(options, true).length, 3);
+  });
+
+  it('reads the anime keyword from movies and shows', () => {
+    assert.ok(isAnimeTitle({ keywords: { keywords: [{ id: 210024 }] } }));
+    assert.ok(isAnimeTitle({ keywords: { results: [{ id: 210024 }] } }));
+    assert.ok(!isAnimeTitle({ keywords: { results: [{ id: 1 }] } }));
+    assert.ok(!isAnimeTitle({}));
+  });
+});
+
+describe('standardOptionServer', () => {
+  const servers = [
+    { id: 0, is4k: false, isDefault: true },
+    { id: 1, is4k: false, isDefault: false, buttonLabel: 'Lithuanian' },
+    { id: 2, is4k: true, isDefault: true },
+  ];
+
+  it('picks the default server without a version name', () => {
+    assert.strictEqual(standardOptionServer(servers, false)?.id, 0);
+    assert.strictEqual(standardOptionServer(servers, true)?.id, 2);
+  });
+
+  it('never returns a version server', () => {
+    assert.strictEqual(standardOptionServer(servers, false, 1), undefined);
+    assert.strictEqual(standardOptionServer(servers, false, 0)?.id, 0);
   });
 });

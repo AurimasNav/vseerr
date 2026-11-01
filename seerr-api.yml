@@ -593,6 +593,10 @@ components:
           type: boolean
           example: true
           description: Use the option's profile only while no other version has the title (available, partly available or downloading).
+        animeOnly:
+          type: boolean
+          example: true
+          description: Offer the option only for titles TMDB tags as anime.
       required:
         - label
         - profileId
@@ -6789,7 +6793,7 @@ paths:
                   description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
                 requestOption:
                   type: string
-                  description: VSeerr. Id of one of the chosen version's request options (requires isServiceRequest and serverId).
+                  description: VSeerr. Id of one of the chosen version's request options. Standard requests use the options of the default server without a version name.
               required:
                 - mediaType
                 - mediaId

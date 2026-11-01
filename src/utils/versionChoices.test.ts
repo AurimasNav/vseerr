@@ -193,7 +193,7 @@ describe('version request options', () => {
     assert.strictEqual(optionApplies(choice, option), false);
   });
 
-  it('gives the standard version no options', () => {
+  it('does not give a version’s options to the standard version', () => {
     const standard = getVersionChoices({
       mediaType: 'movie',
       media: media([]),
@@ -203,6 +203,39 @@ describe('version request options', () => {
       isManager: false,
     })[0];
     assert.deepStrictEqual(standard.options, []);
+  });
+});
+
+describe('standard request options', () => {
+  const dub = {
+    id: 'english-dub-only',
+    label: 'English dub only',
+    onlyIfNoOtherVersion: false,
+    animeOnly: true,
+  };
+  const withStandardOption = services.map((s) =>
+    s.id === 0 ? { ...s, requestOptions: [dub] } : s
+  ) as ServiceCommonServer[];
+  const standardChoice = (isAnime: boolean) =>
+    getVersionChoices({
+      mediaType: 'movie',
+      media: media([]),
+      services: withStandardOption,
+      isAnime,
+      userId: 7,
+      grants: [],
+      isManager: false,
+    })[0];
+
+  it('shows the default server’s options under Standard for anime', () => {
+    const choice = standardChoice(true);
+    assert.strictEqual(choice.key, 'standard');
+    assert.deepStrictEqual(choice.options, [dub]);
+    assert.strictEqual(optionApplies(choice, dub), true);
+  });
+
+  it('hides anime-only options for other titles', () => {
+    assert.deepStrictEqual(standardChoice(false).options, []);
   });
 });
 

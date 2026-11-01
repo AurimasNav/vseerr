@@ -72,12 +72,17 @@ Object.defineProperty(TheMovieDb.prototype, 'getTvShow', {
   configurable: true,
 });
 
+/** TMDB ids from 88000 to 88999 are anime in these tests. */
+const isFakeAnime = (tmdbId: number) => tmdbId >= 88000 && tmdbId < 89000;
+
 function fakeTmdbMovie(tmdbId: number): TmdbMovieDetails {
   return {
     id: tmdbId,
     genres: [],
     original_language: 'en',
-    keywords: { keywords: [] },
+    keywords: {
+      keywords: isFakeAnime(tmdbId) ? [{ id: 210024, name: 'anime' }] : [],
+    },
     external_ids: {},
   } as unknown as TmdbMovieDetails;
 }
@@ -2085,7 +2090,7 @@ describe('POST /request, version request options', () => {
     assert.strictEqual(res.status, 400);
   });
 
-  it('rejects an option on a standard request', async () => {
+  it('rejects a version option on a standard request', async () => {
     const agent = await loginAs('admin@seerr.dev', 'test1234');
     const res = await agent.post('/request').send({
       mediaType: 'movie',
@@ -2173,5 +2178,66 @@ describe('POST/PUT /request, version servers as destination', () => {
       where: { id: mediaRequest.id },
     });
     assert.notStrictEqual(saved.serverId, 3);
+  });
+});
+
+describe('POST /request, standard request options', () => {
+  const DUB = {
+    id: 'english-dub-only',
+    label: 'English dub only',
+    profileId: 13,
+    onlyIfNoOtherVersion: false,
+    animeOnly: true,
+  };
+
+  beforeEach(() => {
+    configureRadarr([
+      { name: 'Radarr', activeProfileId: 14, requestOptions: [DUB] },
+      { name: 'Radarr LT', buttonLabel: 'Lithuanian', activeProfileId: 7 },
+    ]);
+    getSettings().sonarr = [];
+  });
+
+  it('requests an anime title with the option profile', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: 'movie', mediaId: 88001, requestOption: DUB.id });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.profileId, 13);
+    assert.ok(!res.body.isServiceRequest);
+  });
+
+  it('rejects an anime-only option for a title that is not anime', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: 'movie', mediaId: 77101, requestOption: DUB.id });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('does not offer standard options to a version', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 88002,
+      serverId: 1,
+      isServiceRequest: true,
+      requestOption: DUB.id,
+    });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('leaves a plain standard request alone', async () => {
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: 'movie', mediaId: 88003 });
+
+    assert.strictEqual(res.status, 201);
+    assert.ok(!res.body.profileId || res.body.profileId === 14);
   });
 });

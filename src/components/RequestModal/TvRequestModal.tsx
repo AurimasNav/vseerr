@@ -255,7 +255,9 @@ const TvRequestModal = ({
                 ? { requestOption: version.requestOption }
                 : {}),
             }
-          : {}),
+          : version.requestOption
+            ? { requestOption: version.requestOption }
+            : {}),
         ignoreQuota: requestOverrides?.ignoreQuota,
         seasons: settings.currentSettings.partialRequestsEnabled
           ? selectedSeasons.sort((a, b) => a - b)

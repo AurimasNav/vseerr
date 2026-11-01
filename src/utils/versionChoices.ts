@@ -2,7 +2,11 @@ import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
 import type { PublicRequestOption } from '@server/lib/requestOptions';
-import { otherVersionHasTitle } from '@server/lib/requestOptions';
+import {
+  optionsForTitle,
+  otherVersionHasTitle,
+  standardOptionServer,
+} from '@server/lib/requestOptions';
 import type { VersionCoverageResult } from '@server/lib/versionCoverage';
 import {
   getLabelledServices,
@@ -165,8 +169,11 @@ export const getVersionChoices = ({
         !closedByOtherVersion(STANDARD_VERSION) &&
         !closedByCoverage(STANDARD_VERSION),
       otherVersionHeld: closedByOtherVersion(STANDARD_VERSION),
-      options: [],
-      otherVersionHasTitle: false,
+      options: optionsForTitle(
+        standardOptionServer(services ?? [], false)?.requestOptions,
+        isAnime
+      ),
+      otherVersionHasTitle: hasTitleElsewhere(undefined),
       ...coverageOf(STANDARD_VERSION),
     },
   ];
@@ -191,7 +198,7 @@ export const getVersionChoices = ({
         !closedByOtherVersion(key) &&
         !closedByCoverage(key),
       otherVersionHeld: closedByOtherVersion(key),
-      options: service.requestOptions ?? [],
+      options: optionsForTitle(service.requestOptions, isAnime),
       otherVersionHasTitle: hasTitleElsewhere(service.id),
       ...coverageOf(key),
     });

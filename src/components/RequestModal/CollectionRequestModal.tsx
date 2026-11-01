@@ -245,7 +245,9 @@ const CollectionRequestModal = ({
                     ? { requestOption: version.requestOption }
                     : {}),
                 }
-              : {}),
+              : version.requestOption
+                ? { requestOption: version.requestOption }
+                : {}),
             ...overrideParams,
           });
         })

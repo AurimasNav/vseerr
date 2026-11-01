@@ -282,11 +282,12 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
               tagRequests: values.tagRequests,
               buttonLabel: values.buttonLabel || undefined,
               animeOnly: values.animeOnly,
-              requestOptions: values.buttonLabel
-                ? values.requestOptions.filter(
-                    (o) => o.label.trim() && o.profileId > 0
-                  )
-                : [],
+              requestOptions:
+                values.buttonLabel || !values.is4k
+                  ? values.requestOptions.filter(
+                      (o) => o.label.trim() && o.profileId > 0
+                    )
+                  : [],
               definingFormats: values.is4k ? [] : values.definingFormats,
               definingMatch: values.definingMatch,
             };
@@ -837,7 +838,7 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                   value={values.requestOptions}
                   onChange={(value) => setFieldValue('requestOptions', value)}
                   profiles={testResponse.profiles}
-                  hasVersionName={!!values.buttonLabel?.trim()}
+                  hasVersionName={!!values.buttonLabel?.trim() || !values.is4k}
                 />
               </div>
             </Modal>

@@ -11,8 +11,10 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import overrideRules from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
 import {
+  isAnimeTitle,
   otherVersionHasTitle,
   requestOptionProfile,
+  standardOptionServer,
 } from '@server/lib/requestOptions';
 import { getSettings } from '@server/lib/settings';
 import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
@@ -403,6 +405,8 @@ export class MediaRequest {
     // VSeerr request option: a choice the admin attached to the version
     // (e.g. "English is OK until a Lithuanian dub appears"). It picks the
     // quality profile; an explicit profileId from an advanced requester wins.
+    // Standard requests use the options of the default server without a
+    // version name.
     if (requestBody.requestOption !== undefined) {
       const servers =
         requestBody.mediaType === MediaType.MOVIE
@@ -410,13 +414,22 @@ export class MediaRequest {
           : settings.sonarr;
       const server = isServiceSpecific
         ? servers.find((s) => s.id === requestBody.serverId)
-        : undefined;
+        : standardOptionServer<(typeof servers)[number]>(
+            servers,
+            !!requestBody.is4k,
+            requestBody.serverId
+          );
       const option = server?.requestOptions?.find(
         (o) => o.id === requestBody.requestOption
       );
       if (!option) {
         throw new InvalidServiceRequestError(
           'This request option does not exist for the chosen version.'
+        );
+      }
+      if (option.animeOnly && !isAnimeTitle(tmdbMedia)) {
+        throw new InvalidServiceRequestError(
+          'This request option only applies to anime.'
         );
       }
       const standardServers = servers.filter((s) => !s.is4k);
@@ -428,7 +441,9 @@ export class MediaRequest {
       const optionProfile = requestOptionProfile(
         option,
         otherVersionHasTitle({
-          serverId: requestBody.serverId ?? undefined,
+          serverId: isServiceSpecific
+            ? (requestBody.serverId ?? undefined)
+            : undefined,
           standardStatus: media?.id ? media.status : undefined,
           serviceStatuses: statusRows,
           standardServerIds: standardServers

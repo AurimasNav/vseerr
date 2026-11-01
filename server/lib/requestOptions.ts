@@ -1,10 +1,12 @@
+import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaStatus } from '@server/constants/media';
 
-// VSeerr request options: extra choices an admin attaches to a version
-// (Settings → Services), shown to requesters as checkboxes under that
-// version. A ticked option sends the request with the option's quality
-// profile. This file is shared by the server and the request dialog, so it
-// must stay free of server-only imports.
+// VSeerr request options: extra choices an admin attaches to a server
+// (Settings → Services), shown to requesters as checkboxes under its version
+// (the default non-4K server without a version name carries the options of
+// the standard version). A ticked option sends the request with the option's
+// quality profile. This file is shared by the server and the request dialog,
+// so it must stay free of server-only imports.
 
 export interface RequestOptionSetting {
   id: string;
@@ -12,12 +14,14 @@ export interface RequestOptionSetting {
   profileId: number;
   profileName?: string;
   onlyIfNoOtherVersion: boolean;
+  /** Only offered for anime (TMDB keyword "anime"). */
+  animeOnly?: boolean;
 }
 
 /** What requesters see: no profile details. */
 export type PublicRequestOption = Pick<
   RequestOptionSetting,
-  'id' | 'label' | 'onlyIfNoOtherVersion'
+  'id' | 'label' | 'onlyIfNoOtherVersion' | 'animeOnly'
 >;
 
 export const MAX_REQUEST_OPTIONS = 10;
@@ -75,6 +79,7 @@ export const sanitizeRequestOptions = (
         ? { profileName: item.profileName.slice(0, MAX_LABEL_LENGTH) }
         : {}),
       onlyIfNoOtherVersion: item.onlyIfNoOtherVersion === true,
+      ...(item.animeOnly === true ? { animeOnly: true } : {}),
     });
   }
   return options;
@@ -83,11 +88,55 @@ export const sanitizeRequestOptions = (
 export const publicRequestOptions = (
   options: RequestOptionSetting[] | undefined
 ): PublicRequestOption[] =>
-  (options ?? []).map(({ id, label, onlyIfNoOtherVersion }) => ({
+  (options ?? []).map(({ id, label, onlyIfNoOtherVersion, animeOnly }) => ({
     id,
     label,
     onlyIfNoOtherVersion,
+    ...(animeOnly ? { animeOnly: true } : {}),
   }));
+
+/** Whether TMDB marks the title as anime (movies list keywords, shows results). */
+export const isAnimeTitle = (media: {
+  keywords?: { keywords?: { id: number }[]; results?: { id: number }[] };
+}): boolean =>
+  [
+    ...(media.keywords?.keywords ?? []),
+    ...(media.keywords?.results ?? []),
+  ].some((keyword) => keyword.id === ANIME_KEYWORD_ID);
+
+/** Options a title can use: anime-only options are left out for other titles. */
+export const optionsForTitle = <
+  T extends Pick<PublicRequestOption, 'animeOnly'>,
+>(
+  options: T[] | undefined,
+  isAnime: boolean
+): T[] => (options ?? []).filter((o) => isAnime || !o.animeOnly);
+
+/**
+ * The server whose options apply to a standard request: the given server if
+ * it is not a version, otherwise the default server without a version name
+ * for the same 4K setting.
+ */
+export const standardOptionServer = <
+  T extends {
+    id: number;
+    is4k?: boolean;
+    isDefault?: boolean;
+    buttonLabel?: string;
+  },
+>(
+  servers: T[],
+  is4k: boolean,
+  serverId?: number | null
+): T | undefined => {
+  const plain = servers.filter(
+    (s) => !!s.is4k === is4k && !s.buttonLabel?.trim()
+  );
+  if (serverId !== undefined && serverId !== null) {
+    return plain.find((s) => s.id === serverId);
+  }
+  return plain.find((s) => s.isDefault) ?? plain[0];
+};
 
 const HAS_TITLE = new Set([
   MediaStatus.AVAILABLE,
