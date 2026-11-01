@@ -21,6 +21,7 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import { upsertMediaServiceStatus } from '@server/lib/mediaServiceStatus';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { getSettings } from '@server/lib/settings';
+import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
 import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
@@ -46,17 +47,6 @@ const sanitizeDisplayName = (displayName: string): string => {
 
 @EventSubscriber()
 export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRequest> {
-  private getServiceLabel(entity: MediaRequest): string | undefined {
-    if (!entity.isServiceRequest || entity.serverId == null) {
-      return undefined;
-    }
-    const settings = getSettings();
-    const servers =
-      entity.type === MediaType.MOVIE ? settings.radarr : settings.sonarr;
-    const server = servers.find((s) => s.id === entity.serverId);
-    return server?.buttonLabel ?? server?.name;
-  }
-
   private async isAlreadyAvailable(
     manager: EntityManager,
     entity: MediaRequest,
@@ -115,7 +105,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const tmdb = new TheMovieDb();
-    const serviceLabel = this.getServiceLabel(entity);
+    const serviceLabel = requestVersionLabel(entity);
 
     try {
       const movie = await tmdb.getMovie({
@@ -123,9 +113,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       });
 
       notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
-        event: `${entity.is4k ? '4K ' : ''}Movie Request Now Available${
-          serviceLabel ? ` in ${serviceLabel}` : ''
-        }`,
+        event: withVersion(
+          `${entity.is4k ? '4K ' : ''}Movie Request Now Available`,
+          serviceLabel
+        ),
         notifyAdmin: false,
         notifySystem: true,
         notifyUser: entity.requestedBy,
@@ -193,15 +184,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const tmdb = new TheMovieDb();
-    const serviceLabel = this.getServiceLabel(entity);
+    const serviceLabel = requestVersionLabel(entity);
 
     try {
       const tv = await tmdb.getTvShow({ tvId: entity.media.tmdbId });
 
       notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
-        event: `${entity.is4k ? '4K ' : ''}Series Request Now Available${
-          serviceLabel ? ` in ${serviceLabel}` : ''
-        }`,
+        event: withVersion(
+          `${entity.is4k ? '4K ' : ''}Series Request Now Available`,
+          serviceLabel
+        ),
         subject: `${tv.name}${
           tv.first_air_date ? ` (${tv.first_air_date.slice(0, 4)})` : ''
         }`,

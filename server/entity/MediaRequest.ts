@@ -14,6 +14,7 @@ import {
   requestOptionProfile,
 } from '@server/lib/requestOptions';
 import { getSettings } from '@server/lib/settings';
+import { requestVersionLabel, withVersion } from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
@@ -927,6 +928,11 @@ export class MediaRequest {
         case Notification.MEDIA_FAILED:
           event = `${entity.is4k ? '4K ' : ''}${mediaType} Request Failed`;
           break;
+      }
+
+      // VSeerr: name the version, e.g. "Movie Request Approved in German".
+      if (event) {
+        event = withVersion(event, requestVersionLabel(entity));
       }
 
       if (entity.type === MediaType.MOVIE) {
