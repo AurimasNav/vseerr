@@ -7,14 +7,11 @@
 #
 # Tags:
 #   <Seerr version>-vseerr.<VSeerr version>
-#                       each build of main, e.g. 3.5.1-vseerr.0.4.2: the Seerr
+#                       each build of main, e.g. 3.5.1-vseerr.2.118.0: the Seerr
 #                       release it is based on (package.json) plus VSeerr's
 #                       own MAJOR.MINOR.PATCH (GitVersion.yml)
 #   main                latest build of main
 #   sha-<short sha>     one per commit, never moved
-#
-# Each published version is also a git tag, vseerr-v<VSeerr version>, on the
-# commit it was built from; GitVersion counts the next version from it.
 #
 # Pull requests that touch the image build it without publishing.
 name: 'VSeerr Image'
@@ -39,9 +36,7 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Builds of main run one after another and are not cancelled once started:
-  # a build that tagged its version also publishes it.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   # A job of its own, with read-only access: GitVersion is a downloaded binary
@@ -54,12 +49,11 @@ jobs:
       contents: read
     outputs:
       semver: ${{ steps.version.outputs.semver }}
-      vseerr: ${{ steps.version.outputs.vseerr }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # GitVersion reads main's history since the vseerr-v0.0.0 tag.
+          # GitVersion reads the whole history of main.
           fetch-depth: 0
           persist-credentials: false
 
@@ -80,54 +74,18 @@ jobs:
           # The Seerr release VSeerr is based on.
           $seerr = (Get-Content package.json -Raw | ConvertFrom-Json).version
           if ($seerr -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected Seerr version '$seerr'" }
-          # Pull requests get a pre-release label (0.4.3-PullRequest25.1); join it with dots.
+          # Pull requests get a pre-release label (2.118.0-PullRequest25.1); join it with dots.
           $version = "$seerr-vseerr.$($vseerr -replace '-', '.')"
           # Published tags are exactly <Seerr version>-vseerr.<MAJOR.MINOR.PATCH>,
           # the form deployments follow.
           $pattern = $env:MAIN -eq 'true' ? '^\d+\.\d+\.\d+-vseerr\.\d+\.\d+\.\d+$' : '^\d+\.\d+\.\d+-vseerr\.\d+\.\d+\.\d+(\.[0-9A-Za-z]+)*$'
           if ($version -notmatch $pattern) { throw "Unexpected version '$version'" }
           "semver=$version" >> $env:GITHUB_OUTPUT
-          "vseerr=$vseerr" >> $env:GITHUB_OUTPUT
           "Version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
-
-  # Tags the commit with its version before the image is published, so a
-  # version is never published twice. Only this job can write to the repo; it
-  # runs no downloaded code and does not check the repo out.
-  tag:
-    name: Tag
-    needs: version
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - name: Tag the version
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VSEERR_VERSION: ${{ needs.version.outputs.vseerr }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          if ($env:VSEERR_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected version '$env:VSEERR_VERSION'" }
-          $tag = "vseerr-v$env:VSEERR_VERSION"
-          $refs = gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$tag" | ConvertFrom-Json
-          $existing = ($refs | Where-Object ref -EQ "refs/tags/$tag").object.sha
-          if ($existing -eq $env:GITHUB_SHA) {
-            # A re-run of this commit's build.
-            "``$tag`` is already on this commit." >> $env:GITHUB_STEP_SUMMARY
-          } elseif ($existing) {
-            throw "$tag already exists on $existing; not publishing it again for $env:GITHUB_SHA."
-          } else {
-            gh api "repos/$env:GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$env:GITHUB_SHA" --silent
-            "Tagged ``$tag``." >> $env:GITHUB_STEP_SUMMARY
-          }
 
   image:
     name: Image
-    needs: [version, tag]
-    # Pull requests skip the tag job.
-    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.tag.result) }}
+    needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
