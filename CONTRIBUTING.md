@@ -33,6 +33,14 @@ Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob
 
 - `main` is VSeerr: the latest Seerr release plus VSeerr's changes. Open pull requests against `main`.
 - Seerr releases are merged into `main` as they come out. A scheduled workflow checks each new release and opens an issue with the result.
+- Merge a release with `bin/Merge-SeerrRelease.ps1` ([PowerShell 7.4](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) or newer), the script the scheduled check uses. It keeps VSeerr's version of the files listed in `.github/vseerr-owned-files` and leaves the merge uncommitted for review:
+
+  ```sh
+  git switch -c seerr-v3.6.0 origin/main
+  pwsh ./bin/Merge-SeerrRelease.ps1 -Tag v3.6.0
+  ```
+
+  Resolve any conflicts, commit, and open a pull request. Merge it with a merge commit, not squashed, so Seerr's history stays in `main`.
 
 ## Pull request titles and versions
 

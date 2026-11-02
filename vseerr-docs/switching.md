@@ -18,7 +18,7 @@ VSeerr keeps everything it adds in tables of its own, all named `vseerr_*`:
 
 It does not add columns to Seerr's tables, and its tables have no foreign keys to them. Seerr ignores these tables, and Seerr's own database updates never touch them.
 
-Version names and default versions are stored in `settings.json`, in the Radarr and Sonarr server entries (`buttonLabel`, `animeOnly`) and in `main.defaultRequestServices`. Seerr keeps these keys when it loads the file.
+VSeerr's settings are stored in `settings.json`. In each Radarr and Sonarr server entry: `buttonLabel` (the version name), `animeOnly`, `requestOptions`, `definingFormats`, `definingMatch` and `coverageMode`. In `main`: `defaultRequestServices`, `versionHoldHours` and `oneVersionPerTitle`. Seerr keeps these keys when it loads the file.
 
 ## Version requirement
 

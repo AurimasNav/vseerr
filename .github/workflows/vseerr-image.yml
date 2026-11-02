@@ -11,9 +11,15 @@
 #                       release it is based on (package.json) plus VSeerr's
 #                       own MAJOR.MINOR.PATCH (GitVersion.yml)
 #   main                latest build of main
-#   sha-<short sha>     one per commit, never moved
+#   sha-<short sha>     one per commit of main
 #
-# Pull requests that touch the image build it without publishing.
+# Only main publishes, and a version tag is never overwritten: re-running a
+# build that was already published skips publishing. Pull requests that touch
+# the image, and manual runs on other branches, build it without publishing.
+#
+# Each published image carries an SBOM and build provenance, and GitHub signs
+# an attestation for it. To check that an image was built here:
+#   gh attestation verify oci://ghcr.io/aurimasnav/vseerr:<tag> --repo AurimasNav/vseerr
 name: 'VSeerr Image'
 
 on:
@@ -91,8 +97,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Signing the build attestation.
+      id-token: write
+      attestations: write
     env:
-      PUBLISH: ${{ github.event_name != 'pull_request' }}
+      MAIN: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
       VERSION: ${{ needs.version.outputs.semver }}
     steps:
       - name: Checkout
@@ -107,11 +116,49 @@ jobs:
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "timestamp=$(git log -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
 
+      # A published version tag is never moved: re-running a build of main
+      # that was already published skips publishing instead of replacing the
+      # image with a new digest. A tag already published from another commit
+      # fails the build.
+      - name: Check the version is not published yet
+        id: published
+        if: env.MAIN == 'true'
+        shell: pwsh
+        env:
+          IMAGE: ${{ steps.vars.outputs.image }}
+        run: |
+          $repository = $env:IMAGE -replace '^ghcr\.io/', ''
+          $token = (Invoke-RestMethod "https://ghcr.io/token?scope=repository:${repository}:pull&service=ghcr.io").token
+          $headers = @{
+            Authorization = "Bearer $token"
+            Accept = 'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
+          }
+          $registry = "https://ghcr.io/v2/$repository"
+          $manifest = Invoke-RestMethod "$registry/manifests/$env:VERSION" -Headers $headers -SkipHttpErrorCheck -StatusCodeVariable status
+          if ($status -eq 404) {
+            'publish=true' >> $env:GITHUB_OUTPUT
+            return
+          }
+          if ($status -ne 200) {
+            throw "Could not check whether $env:VERSION is published: HTTP $status"
+          }
+          if ($manifest.manifests) {
+            $image = $manifest.manifests | Where-Object { $_.platform.os -eq 'linux' -and $_.platform.architecture -eq 'amd64' } | Select-Object -First 1
+            $manifest = Invoke-RestMethod "$registry/manifests/$($image.digest)" -Headers $headers
+          }
+          $config = Invoke-RestMethod "$registry/blobs/$($manifest.config.digest)" -Headers @{ Authorization = "Bearer $token" }
+          $revision = $config.config.Labels.'org.opencontainers.image.revision'
+          if ($revision -ne $env:GITHUB_SHA) {
+            throw "$env:VERSION is already published from commit $revision, not $env:GITHUB_SHA. Not overwriting it."
+          }
+          'publish=false' >> $env:GITHUB_OUTPUT
+          "``$env:VERSION`` is already published from this commit; not publishing it again." >> $env:GITHUB_STEP_SUMMARY
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Log in to GitHub Container Registry
-        if: env.PUBLISH == 'true'
+        if: steps.published.outputs.publish == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -126,7 +173,7 @@ jobs:
           tags: |
             type=raw,value=${{ env.VERSION }},enable={{is_default_branch}}
             type=raw,value=main,enable={{is_default_branch}}
-            type=sha,format=short
+            type=sha,format=short,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.title=VSeerr
@@ -139,19 +186,31 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: ${{ env.PUBLISH == 'true' }}
+          push: ${{ steps.published.outputs.publish == 'true' }}
           build-args: |
             COMMIT_TAG=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.vars.outputs.timestamp }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
-          # Only trusted pushes write the build cache; pull requests read it.
-          cache-from: type=gha,scope=vseerr-linux-amd64
-          cache-to: ${{ env.PUBLISH == 'true' && 'type=gha,mode=max,scope=vseerr-linux-amd64' || '' }}
-          provenance: false
+          # The cache is kept in the registry, where only this job can write
+          # (packages: write). A GitHub Actions cache can be written by any
+          # job running on main, including the upstream check, which runs
+          # Seerr's code and its dependencies' install scripts.
+          cache-from: type=registry,ref=${{ steps.vars.outputs.image }}:buildcache
+          cache-to: ${{ steps.published.outputs.publish == 'true' && format('type=registry,ref={0}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', steps.vars.outputs.image) || '' }}
+          provenance: ${{ steps.published.outputs.publish == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ steps.published.outputs.publish == 'true' }}
+
+      - name: Sign the build attestation
+        if: steps.published.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.vars.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
       - name: Summary
-        if: env.PUBLISH == 'true'
+        if: steps.published.outputs.publish == 'true'
         env:
           IMAGE: ${{ steps.vars.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
