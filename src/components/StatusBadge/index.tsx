@@ -27,7 +27,9 @@ export const getStatusLabel = (
   status?: MediaStatus,
   inProgress = false
 ): string => {
-  if (inProgress) {
+  // As in Seerr, Pending stays Pending while something downloads: the
+  // request is not approved yet.
+  if (inProgress && status !== MediaStatus.PENDING) {
     return intl.formatMessage(globalMessages.processing);
   }
 

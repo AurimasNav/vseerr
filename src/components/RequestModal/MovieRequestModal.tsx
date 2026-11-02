@@ -10,6 +10,7 @@ import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
+import { advancedDefaults } from '@app/utils/advancedDefaults';
 import defineMessages from '@app/utils/defineMessages';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaStatus } from '@server/constants/media';
@@ -326,12 +327,7 @@ const MovieRequestModal = ({
             serverFixed={serverId != null}
             requestUser={editRequest.requestedBy}
             requestId={editRequest.id}
-            defaultOverrides={{
-              folder: editRequest.rootFolder,
-              profile: editRequest.profileId,
-              server: serverId ?? editRequest.serverId,
-              tags: editRequest.tags,
-            }}
+            defaultOverrides={advancedDefaults({ serverId, editRequest })}
             onChange={(overrides) => {
               setRequestOverrides(overrides);
             }}
@@ -409,9 +405,7 @@ const MovieRequestModal = ({
           quota={quota}
           serverFixed={requestServerId != null}
           optionProfileId={version.requestOptionProfileId}
-          defaultOverrides={
-            requestServerId != null ? { server: requestServerId } : undefined
-          }
+          defaultOverrides={advancedDefaults({ serverId: requestServerId })}
           onChange={(overrides) => {
             setRequestOverrides(overrides);
           }}
