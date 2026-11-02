@@ -14,6 +14,7 @@ import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
 import {
   ParkedRequest,
+  RowIdentity,
   UserPreference,
   UserVersion,
   VersionRequest,
@@ -48,6 +49,7 @@ export const entities = [
   UserPushSubscription,
   UserSettings,
   ParkedRequest,
+  RowIdentity,
   UserPreference,
   UserVersion,
   VersionRequest,

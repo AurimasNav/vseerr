@@ -1,6 +1,7 @@
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import {
   PARKED_REQUEST_TABLE,
+  ROW_IDENTITY_TABLE,
   USER_PREFERENCE_TABLE,
   USER_VERSION_TABLE,
   VERSION_REQUEST_TABLE,
@@ -113,4 +114,28 @@ export class UserPreference {
   constructor(init?: Partial<UserPreference>) {
     Object.assign(this, init);
   }
+}
+
+/**
+ * What a Seerr user or title that VSeerr's tables point to looked like when
+ * VSeerr last checked: the user's creation time, or the title's type and
+ * TMDB id. SQLite can hand out a deleted row's id again after Seerr rebuilds
+ * a table in a migration; a different fingerprint under the same id means
+ * the id now belongs to someone or something else (see
+ * server/lib/versionDatabase.ts).
+ */
+@Entity({ name: ROW_IDENTITY_TABLE })
+export class RowIdentity {
+  /** `user` or `media`. */
+  @PrimaryColumn({
+    type: 'varchar',
+    primaryKeyConstraintName: 'PK_vseerr_row_identity',
+  })
+  public kind: string;
+
+  @PrimaryColumn({ primaryKeyConstraintName: 'PK_vseerr_row_identity' })
+  public rowId: number;
+
+  @Column({ type: 'text' })
+  public fingerprint: string;
 }

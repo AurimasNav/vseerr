@@ -8,9 +8,13 @@
 // behind and that no request is lost.
 //
 //   pnpm vseerr:roundtrip                        SQLite in a temp folder
-//   DB_TYPE=postgres DB_HOST=… pnpm vseerr:roundtrip
+//   DB_TYPE=postgres VSEERR_ROUNDTRIP_DB_NAME=… DB_HOST=… pnpm vseerr:roundtrip
 //
-// For Postgres the database must be empty: everything in it is dropped.
+// For Postgres it needs a database of its own, named in
+// VSEERR_ROUNDTRIP_DB_NAME (DB_NAME is ignored), because it deletes
+// everything in it. It refuses a database that has tables it did not create.
+// Never point it at the database Seerr or VSeerr uses. A development tool:
+// it is not part of the build.
 import { entities } from '@server/datasource';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
@@ -45,6 +49,7 @@ const seerrMigrations = allMigrations.filter(
 const tempDir = isPostgres
   ? undefined
   : mkdtempSync(path.join(tmpdir(), 'vseerr-'));
+const roundTripDatabase = process.env.VSEERR_ROUNDTRIP_DB_NAME?.trim();
 const connection: DataSourceOptions = isPostgres
   ? {
       type: 'postgres',
@@ -52,9 +57,12 @@ const connection: DataSourceOptions = isPostgres
       port: Number(process.env.DB_PORT ?? 5432),
       username: process.env.DB_USER,
       password: process.env.DB_PASS,
-      database: process.env.DB_NAME ?? 'seerr',
+      database: roundTripDatabase,
     }
   : { type: 'sqlite', database: path.join(tempDir as string, 'db.sqlite3') };
+
+/** Marks a Postgres database as the round trip's own, so a rerun may reset it. */
+const MARKER_TABLE = 'vseerr_roundtrip_scratch';
 
 const log = (message: string) => {
   // eslint-disable-next-line no-console
@@ -124,6 +132,7 @@ const tableNames = async (dataSource: DataSource): Promise<string[]> => {
   try {
     return (await queryRunner.getTables())
       .map((table) => table.name.replace(/^public\./, ''))
+      .filter((name) => name !== MARKER_TABLE)
       .sort();
   } finally {
     await queryRunner.release();
@@ -146,12 +155,43 @@ const request = (
   ignoreQuota: false,
 });
 
+/**
+ * Empties the Postgres database, but only one that is empty or that an
+ * earlier round trip created: never a database with anyone else's data.
+ */
+const resetPostgres = async () => {
+  if (!roundTripDatabase) {
+    throw new Error(
+      'Set VSEERR_ROUNDTRIP_DB_NAME to an empty database of its own. The round trip deletes everything in it.'
+    );
+  }
+  if (roundTripDatabase === process.env.DB_NAME?.trim()) {
+    throw new Error(
+      `VSEERR_ROUNDTRIP_DB_NAME is DB_NAME, the database Seerr or VSeerr uses. Use an empty database of its own.`
+    );
+  }
+  const reset = new DataSource({ ...connection } as DataSourceOptions);
+  await reset.initialize();
+  try {
+    const tables: { name: string }[] = await reset.query(
+      `SELECT "table_name" AS "name" FROM "information_schema"."tables" WHERE "table_schema" = 'public'`
+    );
+    const names = tables.map((table) => table.name);
+    if (names.length > 0 && !names.includes(MARKER_TABLE)) {
+      throw new Error(
+        `Database "${roundTripDatabase}" has tables the round trip did not create (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}). Not touching it: use an empty database of its own.`
+      );
+    }
+    await reset.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+    await reset.query(`CREATE TABLE "${MARKER_TABLE}" ("id" integer)`);
+  } finally {
+    await reset.destroy();
+  }
+};
+
 const main = async () => {
   if (isPostgres) {
-    const reset = new DataSource({ ...connection } as DataSourceOptions);
-    await reset.initialize();
-    await reset.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-    await reset.destroy();
+    await resetPostgres();
   }
 
   // 1. A plain Seerr database with one ordinary request.
@@ -226,6 +266,24 @@ const main = async () => {
       { requestId: showVersion },
     ]);
   await db.getRepository(UserVersion).insert({ userId, version: 'radarr:1' });
+  // A second user with a version, who is deleted while Seerr runs.
+  const leaverId = await insertReturningId(db, 'user', {
+    email: 'leaver@example.com',
+    username: 'leaver',
+    permissions: 2,
+    avatar: '',
+    userType: 2,
+    createdAt: '2020-01-01 00:00:00',
+    updatedAt: '2020-01-01 00:00:00',
+  });
+  await db
+    .getRepository(UserVersion)
+    .insert({ userId: leaverId, version: 'radarr:1' });
+  const [{ createdAt: versionCreatedAt }] = await run(
+    db,
+    `SELECT CAST("createdAt" AS TEXT) AS "createdAt" FROM "media_request" WHERE "id" = ?`,
+    [movieVersion]
+  );
 
   // 3. Park the version requests before switching to Seerr.
   assert.strictEqual(await parkVersionRequests(db), 3);
@@ -236,11 +294,26 @@ const main = async () => {
   assert.deepStrictEqual(await requestIds(db), [ordinary]);
   // Seerr removes a title that only had a version request.
   await run(db, `DELETE FROM "media" WHERE "id" = ?`, [removedMovieId]);
+  // Seerr deletes the second user, and a new sign-up gets the same id (on
+  // SQLite this happens after a Seerr migration rebuilds the user table).
+  await run(db, `DELETE FROM "user" WHERE "id" = ?`, [leaverId]);
+  await run(
+    db,
+    `INSERT INTO "user" ("id", "email", "username", "permissions", "avatar", "userType", "createdAt", "updatedAt") VALUES (?, 'newcomer@example.com', 'newcomer', 2, '', 2, '2030-01-01 00:00:00', '2030-01-01 00:00:00')`,
+    [leaverId]
+  );
   const addedBySeerr = await insertReturningId(
     db,
     'media_request',
     request(showId, userId, 'tv')
   );
+  // A request made and deleted again in Seerr: its id must not come back.
+  const deletedBySeerr = await insertReturningId(
+    db,
+    'media_request',
+    request(movieId, userId, 'movie')
+  );
+  await run(db, `DELETE FROM "media_request" WHERE "id" = ?`, [deletedBySeerr]);
   await db.destroy();
 
   // 5. Back on VSeerr, the version requests return with their seasons.
@@ -272,7 +345,19 @@ const main = async () => {
     seasons.map((row: { seasonNumber: number }) => Number(row.seasonNumber)),
     [1, 2]
   );
-  assert.strictEqual(await db.getRepository(UserVersion).count(), 1);
+  // Only the first user's version is left: the new user with the deleted
+  // user's id did not inherit theirs.
+  assert.deepStrictEqual(
+    (await db.getRepository(UserVersion).find()).map((row) => row.userId),
+    [userId]
+  );
+  // The restored request keeps its creation time exactly.
+  const [{ createdAt: restoredCreatedAt }] = await run(
+    db,
+    `SELECT CAST("createdAt" AS TEXT) AS "createdAt" FROM "media_request" WHERE "id" = ?`,
+    [movieVersion]
+  );
+  assert.strictEqual(restoredCreatedAt, versionCreatedAt);
   // VSeerr's entities read the version flag and user versions from its own
   // tables (virtual columns), on both database types.
   const loaded = await db.getRepository(MediaRequest).find({
@@ -306,7 +391,14 @@ const main = async () => {
   );
   assert.ok(
     afterRestore >
-      Math.max(movieVersion, removedVersion, showVersion, addedBySeerr)
+      Math.max(
+        movieVersion,
+        removedVersion,
+        showVersion,
+        addedBySeerr,
+        deletedBySeerr
+      ),
+    `request id ${afterRestore} was handed out again`
   );
 
   // 6. Removing VSeerr leaves a plain Seerr database.

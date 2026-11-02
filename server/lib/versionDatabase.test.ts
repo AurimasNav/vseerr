@@ -368,6 +368,128 @@ describe('switching between Seerr and VSeerr', () => {
     );
   });
 
+  // On SQLite a Seerr migration that rebuilds a table resets its id counter,
+  // so a deleted row's id can go to the next new row. Explicit ids stand in
+  // for that here.
+  const localUser = (email: string) =>
+    getRepository(User).save(
+      new User({
+        email,
+        username: email.split('@')[0],
+        userType: UserType.LOCAL,
+        permissions: Permission.REQUEST,
+        avatar: '',
+      })
+    );
+
+  async function giveIdToNewUser(id: number): Promise<void> {
+    await dataSource.query(`DELETE FROM "user" WHERE "id" = ?`, [id]);
+    await dataSource.query(
+      `INSERT INTO "user" ("id", "email", "username", "userType", "permissions", "avatar", "createdAt", "updatedAt") VALUES (?, 'newcomer@seerr.dev', 'newcomer', ?, ?, '', '2030-01-01 00:00:00', '2030-01-01 00:00:00')`,
+      [id, UserType.LOCAL, Permission.REQUEST]
+    );
+  }
+
+  it('does not give a new user the versions of a deleted user with the same id', async () => {
+    const user = await localUser('leaver@seerr.dev');
+    await setUserVersions(user.id, ['radarr:1']);
+    await getRepository(UserPreference).insert({
+      userId: user.id,
+      name: 'default-version-movie',
+      value: 'radarr:1',
+    });
+    // VSeerr starts, then the user is deleted in Seerr and the id reused.
+    await prepareVersionDatabase(dataSource);
+    await giveIdToNewUser(user.id);
+
+    await prepareVersionDatabase(dataSource);
+
+    assert.strictEqual(
+      await getRepository(UserVersion).count({ where: { userId: user.id } }),
+      0
+    );
+    assert.strictEqual(
+      await getRepository(UserPreference).count({
+        where: { userId: user.id },
+      }),
+      0
+    );
+  });
+
+  it('keeps the versions of a user who only changed their email', async () => {
+    const user = await localUser('stayer@seerr.dev');
+    await setUserVersions(user.id, ['radarr:1']);
+    await prepareVersionDatabase(dataSource);
+    await dataSource.query(`UPDATE "user" SET "email" = ? WHERE "id" = ?`, [
+      'moved@seerr.dev',
+      user.id,
+    ]);
+
+    await prepareVersionDatabase(dataSource);
+    await prepareVersionDatabase(dataSource);
+
+    assert.strictEqual(
+      await getRepository(UserVersion).count({ where: { userId: user.id } }),
+      1
+    );
+  });
+
+  it('does not give a new title the availability of a deleted title with the same id', async () => {
+    const media = await insertMedia(601);
+    await getRepository(MediaServiceStatus).insert({
+      mediaId: media.id,
+      serviceId: 1,
+      serviceType: 'radarr',
+      status: MediaStatus.AVAILABLE,
+    });
+    await prepareVersionDatabase(dataSource);
+    await dataSource.query(`DELETE FROM "media" WHERE "id" = ?`, [media.id]);
+    await dataSource.query(
+      `INSERT INTO "media" ("id", "mediaType", "tmdbId", "status", "status4k") VALUES (?, 'movie', 602, 1, 1)`,
+      [media.id]
+    );
+
+    await prepareVersionDatabase(dataSource);
+
+    assert.strictEqual(await getRepository(MediaServiceStatus).count(), 0);
+  });
+
+  it('does not restore a parked request to a new user with the same id', async () => {
+    const media = await insertMedia(701);
+    const user = await localUser('parker@seerr.dev');
+    await insertRequest({ media, user, serverId: 1, isVersion: true });
+    await parkVersionRequests(dataSource);
+    // On Seerr: the user is deleted and the id given to a new sign-up.
+    await giveIdToNewUser(user.id);
+
+    await prepareVersionDatabase(dataSource);
+
+    assert.strictEqual(await getRepository(ParkedRequest).count(), 0);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('does not make a new request with a reused id a version request', async () => {
+    const media = await insertMedia(801);
+    const other = await insertMedia(802);
+    const user = await demoUser();
+    const id = await insertRequest({
+      media,
+      user,
+      serverId: 1,
+      isVersion: true,
+    });
+    await prepareVersionDatabase(dataSource);
+    await dataSource.query(`DELETE FROM "media_request" WHERE "id" = ?`, [id]);
+    await dataSource.query(
+      `INSERT INTO "media_request" ("id", "status", "type", "mediaId", "requestedById", "is4k", "serverId", "isAutoRequest", "ignoreQuota", "createdAt", "updatedAt") VALUES (?, ?, 'movie', ?, ?, 0, NULL, 0, 0, '2030-01-01 00:00:00', '2030-01-01 00:00:00')`,
+      [id, MediaRequestStatus.APPROVED, other.id, user.id]
+    );
+
+    await prepareVersionDatabase(dataSource);
+
+    assert.strictEqual(await getRepository(VersionRequest).count(), 0);
+  });
+
   it('re-creates missing tables', async () => {
     await dataSource.query(`DROP TABLE "vseerr_user_version"`);
     await dataSource.query(`DROP TABLE "vseerr_user_preference"`);
