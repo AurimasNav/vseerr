@@ -12,6 +12,7 @@ import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
+import { advancedDefaults } from '@app/utils/advancedDefaults';
 import defineMessages from '@app/utils/defineMessages';
 import {
   getLabelledServices,
@@ -615,9 +616,7 @@ const CollectionRequestModal = ({
           key={version.pickerProps.selected ?? 'none'}
           serverFixed={requestServerId != null}
           optionProfileId={version.requestOptionProfileId}
-          defaultOverrides={
-            requestServerId != null ? { server: requestServerId } : undefined
-          }
+          defaultOverrides={advancedDefaults({ serverId: requestServerId })}
           onChange={(overrides) => {
             setRequestOverrides(overrides);
           }}

@@ -10,6 +10,7 @@ import {
   optionApplies,
   optionPreference,
   preferenceChanges,
+  versionLoading,
 } from '@app/utils/versionChoices';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
@@ -45,7 +46,9 @@ const useVersionChoice = ({
 }) => {
   const { user, hasPermission } = useUser();
   const { currentSettings } = useSettings();
-  const { data: services } = useSWR<ServiceCommonServer[]>(
+  const { data: services, error: servicesError } = useSWR<
+    ServiceCommonServer[]
+  >(
     enabled
       ? mediaType === 'movie'
         ? '/api/v1/service/radarr'
@@ -53,13 +56,17 @@ const useVersionChoice = ({
       : null
   );
   // Coverage between versions; only titles Seerr already tracks have it.
-  const { data: mediaVersions } = useSWR<MediaVersionsResponse>(
-    enabled && media?.id ? `/api/v1/media/${media.id}/versions` : null
-  );
+  const mediaVersionsUrl =
+    enabled && media?.id ? `/api/v1/media/${media.id}/versions` : null;
+  const { data: mediaVersions, error: mediaVersionsError } =
+    useSWR<MediaVersionsResponse>(mediaVersionsUrl);
   const preferencesUrl =
     enabled && user ? `/api/v1/user/${user.id}/settings/versions` : null;
-  const { data: preferenceData, mutate: mutatePreferences } =
-    useSWR<PreferencesResponse>(preferencesUrl);
+  const {
+    data: preferenceData,
+    error: preferenceError,
+    mutate: mutatePreferences,
+  } = useSWR<PreferencesResponse>(preferencesUrl);
   // Older builds kept these in the browser; move them to the account once.
   useEffect(() => {
     if (!preferencesUrl || !preferenceData || !user) {
@@ -135,8 +142,27 @@ const useVersionChoice = ({
   return {
     /** Coverage per version (shows use it per season). */
     coverage: mediaVersions?.versions.map((v) => v.coverage) ?? [],
-    /** Services or preferences are still loading. */
-    loading: enabled && (!services || (!!preferencesUrl && !preferenceData)),
+    /**
+     * Services, coverage or preferences are still loading. A failed load
+     * counts as loaded, so the dialog still opens: without services there is
+     * no picker (a standard request), and without preferences nothing is
+     * preselected. Waiting for coverage keeps the preselected version from
+     * changing after the dialog is shown.
+     */
+    loading: versionLoading({
+      enabled,
+      services: { data: services, error: servicesError },
+      coverage: {
+        wanted: !!mediaVersionsUrl,
+        data: mediaVersions,
+        error: mediaVersionsError,
+      },
+      preferences: {
+        wanted: !!preferencesUrl,
+        data: preferenceData,
+        error: preferenceError,
+      },
+    }),
     showPicker,
     /** The chosen version's server; undefined for the standard version. */
     serverId: showPicker ? choice?.serverId : undefined,

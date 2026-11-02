@@ -391,3 +391,45 @@ export const optionApplies = (
   choice: Pick<VersionChoice, 'otherVersionHasTitle'>,
   option: Pick<PublicRequestOption, 'onlyIfNoOtherVersion'>
 ): boolean => !(option.onlyIfNoOtherVersion && choice.otherVersionHasTitle);
+
+interface Loadable {
+  /** Whether it is fetched at all. */
+  wanted?: boolean;
+  data?: unknown;
+  error?: unknown;
+}
+
+const pending = ({ wanted = true, data, error }: Loadable): boolean =>
+  wanted && data === undefined && !error;
+
+/**
+ * Whether the request dialog still waits for version data. A failed load
+ * counts as loaded, so a broken VSeerr endpoint never blocks requests.
+ * Coverage is only waited for when a version server exists, as it is what
+ * decides which version is preselected.
+ */
+export const versionLoading = ({
+  enabled,
+  services,
+  coverage,
+  preferences,
+}: {
+  enabled: boolean;
+  services: {
+    data?: Pick<ServiceCommonServer, 'buttonLabel'>[];
+    error?: unknown;
+  };
+  coverage: Loadable;
+  preferences: Loadable;
+}): boolean => {
+  if (!enabled) {
+    return false;
+  }
+  if (pending(services)) {
+    return true;
+  }
+  const hasVersions = (services.data ?? []).some(
+    (server) => !!server.buttonLabel?.trim()
+  );
+  return (hasVersions && pending(coverage)) || pending(preferences);
+};

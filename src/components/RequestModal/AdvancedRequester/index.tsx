@@ -6,6 +6,7 @@ import useToasts from '@app/hooks/useToasts';
 import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import type { RequestDefaults } from '@app/utils/advancedDefaults';
 import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
 import {
@@ -69,7 +70,8 @@ interface AdvancedRequesterProps {
   tmdbId?: number;
   is4k: boolean;
   isAnime?: boolean;
-  defaultOverrides?: RequestOverrides;
+  /** VSeerr: `null` means "use the server's default" (see advancedDefaults). */
+  defaultOverrides?: RequestDefaults;
   requestUser?: User;
   requestId?: number;
   serverFixed?: boolean;
@@ -124,8 +126,8 @@ const AdvancedRequester = ({
       : allServers;
   }, [allServers, serverFixed, is4k]);
   const [selectedServer, setSelectedServer] = useState<number | null>(
-    defaultOverrides?.server !== undefined && defaultOverrides?.server >= 0
-      ? defaultOverrides?.server
+    defaultOverrides?.server != null && defaultOverrides.server >= 0
+      ? defaultOverrides.server
       : null
   );
   const [selectedProfile, setSelectedProfile] = useState<number>(

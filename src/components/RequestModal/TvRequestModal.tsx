@@ -13,6 +13,7 @@ import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
+import { advancedDefaults } from '@app/utils/advancedDefaults';
 import defineMessages from '@app/utils/defineMessages';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
@@ -830,22 +831,10 @@ const TvRequestModal = ({
           onChange={(overrides) => setRequestOverrides(overrides)}
           requestUser={editRequest?.requestedBy}
           requestId={editRequest?.id}
-          defaultOverrides={
-            requestServerId != null
-              ? {
-                  server: requestServerId,
-                  tags: editRequest?.tags,
-                }
-              : editRequest
-                ? {
-                    folder: editRequest.rootFolder,
-                    profile: editRequest.profileId,
-                    server: editRequest.serverId,
-                    language: editRequest.languageProfileId,
-                    tags: editRequest.tags,
-                  }
-                : undefined
-          }
+          defaultOverrides={advancedDefaults({
+            serverId: requestServerId,
+            editRequest,
+          })}
         />
       )}
     </Modal>

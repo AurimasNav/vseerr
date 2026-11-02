@@ -3,7 +3,7 @@ import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -40,6 +40,11 @@ const DefaultVersions = () => {
   const { data, mutate } = useSWR<VersionSettings>('/api/v1/settings/versions');
   const [saving, setSaving] = useState(false);
   const [holdInput, setHoldInput] = useState<string>('');
+  // Saves run one at a time, in order: a second toggle while the first is
+  // saving waits for it instead of racing it (the later answer would
+  // otherwise overwrite the earlier change on screen).
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pendingSaves = useRef(0);
 
   useEffect(() => {
     if (data) {
@@ -51,24 +56,38 @@ const DefaultVersions = () => {
     return null;
   }
 
-  const save = async (
+  const save = (
     change: Partial<VersionSettings>,
     { saved, failed }: { saved: string; failed: string }
-  ) => {
+  ): Promise<void> => {
+    pendingSaves.current += 1;
     setSaving(true);
-    try {
-      const response = await axios.post<VersionSettings>(
-        '/api/v1/settings/versions',
-        change
-      );
-      await mutate(response.data, { revalidate: false });
-      addToast(saved, { autoDismiss: true, appearance: 'success' });
-    } catch {
-      await mutate();
-      addToast(failed, { autoDismiss: true, appearance: 'error' });
-    } finally {
-      setSaving(false);
-    }
+    // Shown at once, so the next toggle builds on this change.
+    mutate((current) => (current ? { ...current, ...change } : current), {
+      revalidate: false,
+    });
+    const run = async () => {
+      try {
+        const response = await axios.post<VersionSettings>(
+          '/api/v1/settings/versions',
+          change
+        );
+        if (pendingSaves.current === 1) {
+          await mutate(response.data, { revalidate: false });
+        }
+        addToast(saved, { autoDismiss: true, appearance: 'success' });
+      } catch {
+        await mutate();
+        addToast(failed, { autoDismiss: true, appearance: 'error' });
+      } finally {
+        pendingSaves.current -= 1;
+        if (pendingSaves.current === 0) {
+          setSaving(false);
+        }
+      }
+    };
+    queue.current = queue.current.then(run);
+    return queue.current;
   };
 
   const ruleToasts = {
@@ -139,7 +158,6 @@ const DefaultVersions = () => {
               id="oneVersionPerTitle"
               name="oneVersionPerTitle"
               checked={data.oneVersionPerTitle}
-              disabled={saving}
               onChange={(e) =>
                 save({ oneVersionPerTitle: e.target.checked }, ruleToasts)
               }
@@ -164,7 +182,6 @@ const DefaultVersions = () => {
                 max={720}
                 step={1}
                 value={holdInput}
-                disabled={saving}
                 onChange={(e) => setHoldInput(e.target.value)}
                 onBlur={saveHold}
                 onKeyDown={(e) => {

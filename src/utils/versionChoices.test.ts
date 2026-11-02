@@ -9,6 +9,7 @@ import {
   initialVersionChoice,
   optionApplies,
   preferenceChanges,
+  versionLoading,
   versionRequesters,
 } from './versionChoices';
 
@@ -437,5 +438,105 @@ describe('versionRequesters', () => {
       { id: 5, displayName: 'user5' },
     ]);
     assert.deepStrictEqual(german.requesters, []);
+  });
+});
+
+describe('versionLoading (review M5)', () => {
+  const versions = [{ buttonLabel: '' }, { buttonLabel: 'German' }];
+  const loaded = { wanted: true, data: {} };
+  const failed = { wanted: true, error: new Error('500') };
+  const waiting = { wanted: true };
+
+  it('is never loading when versions are off for the dialog', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: false,
+        services: {},
+        coverage: waiting,
+        preferences: waiting,
+      }),
+      false
+    );
+  });
+
+  it('waits for the servers', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: {},
+        coverage: loaded,
+        preferences: loaded,
+      }),
+      true
+    );
+  });
+
+  it('opens the dialog when a VSeerr endpoint fails', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { error: new Error('500') },
+        coverage: failed,
+        preferences: failed,
+      }),
+      false
+    );
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { data: versions },
+        coverage: failed,
+        preferences: failed,
+      }),
+      false
+    );
+  });
+
+  it('waits for coverage when there are versions, so the choice does not flip', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { data: versions },
+        coverage: waiting,
+        preferences: loaded,
+      }),
+      true
+    );
+  });
+
+  it('does not wait for coverage without versions', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { data: [{ buttonLabel: '' }] },
+        coverage: waiting,
+        preferences: loaded,
+      }),
+      false
+    );
+  });
+
+  it('does not wait for coverage of a title Seerr does not track yet', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { data: versions },
+        coverage: { wanted: false },
+        preferences: loaded,
+      }),
+      false
+    );
+  });
+
+  it('waits for the preferences', () => {
+    assert.strictEqual(
+      versionLoading({
+        enabled: true,
+        services: { data: versions },
+        coverage: loaded,
+        preferences: waiting,
+      }),
+      true
+    );
   });
 });
