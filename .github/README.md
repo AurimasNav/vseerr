@@ -15,7 +15,7 @@ Seerr tracks each title once: a movie or show is either requested or it is not. 
 VSeerr adds versions:
 
 - An administrator connects several Radarr or Sonarr instances and gives each one a version name and a default quality profile, for example "German", "Best quality" or "Kids".
-- When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the default on each device.
+- When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the user's default; it is saved with the account.
 - Each version tracks its own requests and availability, so a title can exist once per version.
 - Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
 - A version can offer extra request options, each tied to one of its quality profiles. For example, a German version can offer "English is fine until a German dub appears". Ticking an option selects its profile in the request dialog's Advanced section; picking another profile there afterwards overrides it.
@@ -34,21 +34,21 @@ Everything else is Seerr as released upstream.
 
 The screenshots use demo data: a standard Radarr plus "German" and "French" versions.
 
-**Requesting.** The user picks a version, ticks any of its request options, and can choose another quality profile of that instance.
+**Settings and requesting.** In Settings → Services, each Radarr or Sonarr server gets a version name, its defining formats and its request options. The request dialog shows the same things from the user's side: the version name as a choice, and the request option with the profile it selects.
+
+<img src="../vseerr-docs/images/admin-version-settings.png" alt="Server settings: version name German, defining format German audio, and the request option 'English is fine until a German dub appears' tied to the German or English profile" width="600">
 
 <img src="../vseerr-docs/images/request-dialog.png" alt="Request dialog with Standard, German and French versions, the German option 'English is fine until a German dub appears' and the quality profile" width="600">
 
-**What each version has.** The title page lists every version with what its files contain. Here The Matrix exists in Standard (2160p Remux with Atmos and Dolby Vision) and in German (1080p with German audio).
+The user picks a version, ticks any of its request options, and can choose another quality profile of that instance. The default version and the ticked options are saved with the user's account, so they apply on every device.
 
-<img src="../vseerr-docs/images/versions-panel.png" alt="Versions panel: Standard with 2160p, Atmos, Dolby Vision, Remux and English; German with 1080p, German audio, English and German; French not requested" width="320">
+**What each version has.** The title page lists every version with what its files contain. Here The Matrix exists in Standard (2160p Remux with Atmos and Dolby Vision) and in German (1080p with German audio). A language the version's profile rewards is highlighted.
+
+<img src="../vseerr-docs/images/versions-panel.png" alt="Versions panel: Standard with 2160p, Atmos, Dolby Vision, Remux and English; German with 1080p, English and German highlighted; French not requested" width="320">
 
 **Covered by another version.** Inception's Standard file already has German audio, which is a defining format of the German version. German therefore shows as available through Standard, and only users with Manage Requests can request it separately.
 
 <img src="../vseerr-docs/images/versions-coverage.png" alt="Versions panel: Standard with 1080p, English and German audio; German not requested, available through Standard" width="320">
-
-**Settings.** In Settings → Services, each Radarr or Sonarr server gets a version name, its defining formats and its request options.
-
-<img src="../vseerr-docs/images/admin-version-settings.png" alt="Server settings: version name German, defining format German audio, and the request option 'English is fine until a German dub appears' tied to the German or English profile" width="600">
 
 ## Installing
 

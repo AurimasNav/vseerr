@@ -11,6 +11,7 @@ import MediaServiceStatus from '@server/entity/MediaServiceStatus';
 import { User } from '@server/entity/User';
 import {
   ParkedRequest,
+  UserPreference,
   UserVersion,
   VersionRequest,
 } from '@server/entity/VSeerrVersions';
@@ -344,6 +345,11 @@ describe('switching between Seerr and VSeerr', () => {
       isVersion: true,
     });
     await setUserVersions(user.id, ['radarr:1']);
+    await getRepository(UserPreference).insert({
+      userId: user.id,
+      name: 'default-version-movie',
+      value: 'radarr:1',
+    });
     await dataSource.query(`DELETE FROM "media_request" WHERE "id" = ?`, [id]);
     await dataSource.query(`DELETE FROM "user" WHERE "id" = ?`, [user.id]);
 
@@ -354,10 +360,17 @@ describe('switching between Seerr and VSeerr', () => {
       await getRepository(UserVersion).count({ where: { userId: user.id } }),
       0
     );
+    assert.strictEqual(
+      await getRepository(UserPreference).count({
+        where: { userId: user.id },
+      }),
+      0
+    );
   });
 
   it('re-creates missing tables', async () => {
     await dataSource.query(`DROP TABLE "vseerr_user_version"`);
+    await dataSource.query(`DROP TABLE "vseerr_user_preference"`);
     await ensureVersionTables(dataSource);
     const queryRunner = dataSource.createQueryRunner();
     const present = await Promise.all(

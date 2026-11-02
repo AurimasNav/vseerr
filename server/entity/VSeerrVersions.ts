@@ -1,6 +1,7 @@
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import {
   PARKED_REQUEST_TABLE,
+  USER_PREFERENCE_TABLE,
   USER_VERSION_TABLE,
   VERSION_REQUEST_TABLE,
 } from '@server/lib/versionSql';
@@ -82,4 +83,34 @@ export class ParkedRequest {
 
   @CreateDateColumn()
   public parkedAt: Date;
+}
+
+/**
+ * A user's request dialog preference, kept per account so it follows them
+ * across devices. `name` is `default-version-<movie|tv>` (value: the
+ * version key, e.g. `radarr:2` or `standard`) or
+ * `option-<movie|tv>-<version key>` (value: the ticked request option id).
+ */
+@Entity({ name: USER_PREFERENCE_TABLE })
+@Index('IDX_vseerr_user_preference_user_name', ['userId', 'name'], {
+  unique: true,
+})
+export class UserPreference {
+  @PrimaryGeneratedColumn({
+    primaryKeyConstraintName: 'PK_vseerr_user_preference',
+  })
+  public id: number;
+
+  @Column()
+  public userId: number;
+
+  @Column({ type: 'varchar' })
+  public name: string;
+
+  @Column({ type: 'varchar' })
+  public value: string;
+
+  constructor(init?: Partial<UserPreference>) {
+    Object.assign(this, init);
+  }
 }

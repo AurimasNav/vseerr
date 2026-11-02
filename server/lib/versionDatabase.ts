@@ -1,13 +1,16 @@
 import { ParkedRequest, VersionRequest } from '@server/entity/VSeerrVersions';
 import {
   SERVICE_STATUS_TABLE,
+  USER_PREFERENCE_TABLE,
   USER_VERSION_TABLE,
   VERSION_REQUEST_TABLE,
   VSEERR_TABLES,
 } from '@server/lib/versionSql';
 import logger from '@server/logger';
 import { VSeerrAddVersions1790680026383 as PostgresVersionTables } from '@server/migration/postgres/1790680026383-VSeerrAddVersions';
+import { VSeerrAddUserPreferences1793601938700 as PostgresPreferenceTable } from '@server/migration/postgres/1793601938700-VSeerrAddUserPreferences';
 import { VSeerrAddVersions1790679971018 as SqliteVersionTables } from '@server/migration/sqlite/1790679971018-VSeerrAddVersions';
+import { VSeerrAddUserPreferences1793601938687 as SqlitePreferenceTable } from '@server/migration/sqlite/1793601938687-VSeerrAddUserPreferences';
 import type { DataSource, EntityManager } from 'typeorm';
 
 // Keeps one database usable by both Seerr and VSeerr.
@@ -20,10 +23,11 @@ import type { DataSource, EntityManager } from 'typeorm';
 
 const LABEL = { label: 'Versions' };
 
-const tablesMigration = (dataSource: DataSource) =>
+/** VSeerr's table migrations, oldest first. */
+const tableMigrations = (dataSource: DataSource) =>
   dataSource.options.type === 'postgres'
-    ? new PostgresVersionTables()
-    : new SqliteVersionTables();
+    ? [new PostgresVersionTables(), new PostgresPreferenceTable()]
+    : [new SqliteVersionTables(), new SqlitePreferenceTable()];
 
 /**
  * Creates VSeerr's tables if any are missing. Covers a database whose
@@ -43,7 +47,9 @@ export const ensureVersionTables = async (
       return;
     }
     logger.info('Creating missing VSeerr tables', LABEL);
-    await tablesMigration(dataSource).up(queryRunner);
+    for (const migration of tableMigrations(dataSource)) {
+      await migration.up(queryRunner);
+    }
   } finally {
     await queryRunner.release();
   }
@@ -61,6 +67,7 @@ export const removeVersionOrphans = async (
     [VERSION_REQUEST_TABLE, 'requestId', 'media_request'],
     [SERVICE_STATUS_TABLE, 'mediaId', 'media'],
     [USER_VERSION_TABLE, 'userId', 'user'],
+    [USER_PREFERENCE_TABLE, 'userId', 'user'],
   ];
   for (const [table, column, parent] of statements) {
     await manager.query(
@@ -322,7 +329,9 @@ export const purgeVersionData = async (
   const queryRunner = dataSource.createQueryRunner();
   try {
     await queryRunner.startTransaction();
-    await tablesMigration(dataSource).down(queryRunner);
+    for (const migration of tableMigrations(dataSource).reverse()) {
+      await migration.down(queryRunner);
+    }
     if (await queryRunner.hasTable('migrations')) {
       await queryRunner.query(
         `DELETE FROM "migrations" WHERE "name" LIKE 'VSeerr%'`

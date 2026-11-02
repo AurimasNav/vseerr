@@ -8,6 +8,7 @@ import {
   holdsOtherVersion,
   initialVersionChoice,
   optionApplies,
+  preferenceChanges,
 } from './versionChoices';
 
 const services = [
@@ -285,5 +286,73 @@ describe('version coverage', () => {
   it('ignores coverage for shows (seasons decide)', () => {
     const result = choices([], { coverage, mediaType: 'tv' });
     assert.ok(result.every((c) => c.coveredBy === undefined));
+  });
+});
+
+describe('preferenceChanges', () => {
+  const base = {
+    mediaType: 'movie' as const,
+    selected: 'radarr:2',
+    hasOptions: true,
+    optionId: null,
+  };
+
+  it('saves a new default version and the ticked option', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        saved: {},
+        useByDefault: true,
+        optionId: 'english-until-dubbed',
+      }),
+      {
+        'default-version-movie': 'radarr:2',
+        'option-movie-radarr:2': 'english-until-dubbed',
+      }
+    );
+  });
+
+  it('clears the default when it is unticked for that version', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        hasOptions: false,
+        saved: { 'default-version-movie': 'radarr:2' },
+        useByDefault: false,
+      }),
+      { 'default-version-movie': null }
+    );
+  });
+
+  it('keeps another version as default when this one is not ticked', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        hasOptions: false,
+        saved: { 'default-version-movie': 'standard' },
+        useByDefault: false,
+      }),
+      {}
+    );
+  });
+
+  it('removes an option that was unticked and skips unchanged ones', () => {
+    const saved = {
+      'default-version-movie': 'radarr:2',
+      'option-movie-radarr:2': 'english-until-dubbed',
+    };
+    assert.deepStrictEqual(
+      preferenceChanges({ ...base, saved, useByDefault: true, optionId: null }),
+      { 'option-movie-radarr:2': null }
+    );
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        saved,
+        useByDefault: true,
+        optionId: 'english-until-dubbed',
+      }),
+      {}
+    );
   });
 });

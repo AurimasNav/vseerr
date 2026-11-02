@@ -89,6 +89,19 @@ components:
           readOnly: true
         requestedBy:
           $ref: '#/components/schemas/User'
+    VersionPreferences:
+      type: object
+      description: >-
+        Request dialog preferences, saved per user. `default-version-<movie|tv>`
+        holds the version to preselect (`standard`, `radarr:<id>` or
+        `sonarr:<id>`); `option-<movie|tv>-<version>` holds the request option
+        to tick for that version.
+      additionalProperties:
+        type: string
+        maxLength: 40
+      example:
+        default-version-movie: 'radarr:2'
+        option-movie-radarr:2: english-until-dubbed
     RequestServices:
       type: array
       description: Servers the user may request in through their per-service request buttons
@@ -5530,6 +5543,67 @@ paths:
           description: Account already linked
         '500':
           description: Server error
+  /user/{userId}/settings/versions:
+    get:
+      summary: Get a user's request dialog preferences
+      description: Returns the default version and the ticked request option per version, saved for the user. Users can read their own; `MANAGE_USERS` is required for others.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: The preferences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preferences:
+                    $ref: '#/components/schemas/VersionPreferences'
+    post:
+      summary: Update a user's request dialog preferences
+      description: Sets the given preferences; a `null` value removes one. Unknown names and malformed values are rejected with 400 and nothing is saved. Users can update their own; `MANAGE_USERS` is required for others.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - preferences
+              properties:
+                preferences:
+                  type: object
+                  maxProperties: 20
+                  additionalProperties:
+                    type: string
+                    nullable: true
+                    maxLength: 40
+      responses:
+        '200':
+          description: The saved preferences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preferences:
+                    $ref: '#/components/schemas/VersionPreferences'
+        '400':
+          description: Unknown preference, malformed value, or too many preferences
   /user/{userId}/settings/notifications:
     get:
       summary: Get notification settings for a user

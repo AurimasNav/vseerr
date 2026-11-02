@@ -15,8 +15,8 @@ const messages = defineMessages('components.RequestModal.VersionPicker', {
   otherversionheld: 'You already requested another version of this title.',
   usebydefault: 'Use this version by default',
   usebydefaultdescription:
-    'Preselects it next time on this device. You can still change it.',
-  optionremembered: 'Remembered on this device for this version.',
+    'Preselects it next time, on any device. You can still change it.',
+  optionremembered: 'Remembered for this version.',
   optionnotapplied:
     'Another version already has this title, so this does not apply now.',
   coveredby: 'Already available through {version}.',
