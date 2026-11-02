@@ -19,7 +19,7 @@ import {
 import { getSettings } from '@server/lib/settings';
 import {
   requestNotificationLabel,
-  withVersion,
+  versionExtra,
 } from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
@@ -997,10 +997,8 @@ export class MediaRequest {
           break;
       }
 
-      // VSeerr: name the version, e.g. "Movie Request Approved in German".
-      if (event) {
-        event = withVersion(event, await requestNotificationLabel(entity));
-      }
+      // VSeerr: name the version in a "Version" field, e.g. "German".
+      const version = versionExtra(await requestNotificationLabel(entity));
 
       if (entity.type === MediaType.MOVIE) {
         const movie = await tmdb.getMovie({ movieId: media.tmdbId });
@@ -1020,6 +1018,7 @@ export class MediaRequest {
             omission: '…',
           }),
           image: `https://image.tmdb.org/t/p/w600_and_h900_bestv2${movie.poster_path}`,
+          extra: version,
         });
       } else if (entity.type === MediaType.TV) {
         const tv = await tmdb.getTvShow({ tvId: media.tmdbId });
@@ -1040,6 +1039,7 @@ export class MediaRequest {
           }),
           image: `https://image.tmdb.org/t/p/w600_and_h900_bestv2${tv.poster_path}`,
           extra: [
+            ...version,
             {
               name: 'Requested Seasons',
               value: entity.seasons

@@ -13,9 +13,9 @@ import {
   requestNotificationLabel,
   requestVersionLabel,
   standardLabelFrom,
+  versionExtra,
   versionLabelFrom,
   withProfile,
-  withVersion,
 } from '@server/lib/versionLabel';
 
 const servers = [
@@ -134,24 +134,24 @@ describe('withProfile', () => {
   });
 });
 
-describe('withVersion', () => {
-  it('appends the version name', () => {
-    assert.strictEqual(
-      withVersion('Movie Request Approved', 'Russian'),
-      'Movie Request Approved in Russian'
-    );
+describe('versionExtra', () => {
+  it('makes a Version field', () => {
+    assert.deepStrictEqual(versionExtra('Russian'), [
+      { name: 'Version', value: 'Russian' },
+    ]);
   });
 
-  it('leaves the event unchanged without a version', () => {
-    assert.strictEqual(
-      withVersion('Movie Request Approved', undefined),
-      'Movie Request Approved'
-    );
+  it('adds no field without a version', () => {
+    assert.deepStrictEqual(versionExtra(undefined), []);
   });
 });
 
 describe('request notifications name the version', () => {
-  const sent: { type: Notification; event?: string }[] = [];
+  const sent: {
+    type: Notification;
+    event?: string;
+    extra?: { name: string; value: string }[];
+  }[] = [];
 
   beforeEach(() => {
     sent.length = 0;
@@ -168,7 +168,7 @@ describe('request notifications name the version', () => {
       notificationManager,
       'sendNotification',
       (type: Notification, payload: NotificationPayload) => {
-        sent.push({ type, event: payload.event });
+        sent.push({ type, event: payload.event, extra: payload.extra });
       }
     );
     // TheMovieDb methods are class fields, so stub them on the prototype.
@@ -204,7 +204,7 @@ describe('request notifications name the version', () => {
     });
   const media = { tmdbId: 1 } as Media;
 
-  it('says "in Russian" when a movie is requested in Russian', async () => {
+  it('shows "Version: Russian" when a movie is requested in Russian', async () => {
     await MediaRequest.sendNotification(
       request(MediaType.MOVIE, true, 1),
       media,
@@ -213,12 +213,13 @@ describe('request notifications name the version', () => {
     assert.deepStrictEqual(sent, [
       {
         type: Notification.MEDIA_AUTO_APPROVED,
-        event: 'Movie Request Automatically Approved in Russian',
+        event: 'Movie Request Automatically Approved',
+        extra: [{ name: 'Version', value: 'Russian' }],
       },
     ]);
   });
 
-  it('says "in Russian" when a series request waits for approval', async () => {
+  it('shows "Version: Russian" when a series request waits for approval', async () => {
     await MediaRequest.sendNotification(
       request(MediaType.TV, true, 1),
       media,
@@ -227,12 +228,16 @@ describe('request notifications name the version', () => {
     assert.deepStrictEqual(sent, [
       {
         type: Notification.MEDIA_PENDING,
-        event: 'New Series Request in Russian',
+        event: 'New Series Request',
+        extra: [
+          { name: 'Version', value: 'Russian' },
+          { name: 'Requested Seasons', value: '' },
+        ],
       },
     ]);
   });
 
-  it('says "in Standard" for a standard request', async () => {
+  it('shows "Version: Standard" for a standard request', async () => {
     await MediaRequest.sendNotification(
       request(MediaType.MOVIE, false, 0),
       media,
@@ -241,7 +246,8 @@ describe('request notifications name the version', () => {
     assert.deepStrictEqual(sent, [
       {
         type: Notification.MEDIA_APPROVED,
-        event: 'Movie Request Approved in Standard',
+        event: 'Movie Request Approved',
+        extra: [{ name: 'Version', value: 'Standard' }],
       },
     ]);
   });
@@ -254,7 +260,11 @@ describe('request notifications name the version', () => {
       Notification.MEDIA_APPROVED
     );
     assert.deepStrictEqual(sent, [
-      { type: Notification.MEDIA_APPROVED, event: 'Movie Request Approved' },
+      {
+        type: Notification.MEDIA_APPROVED,
+        event: 'Movie Request Approved',
+        extra: [],
+      },
     ]);
   });
 

@@ -6,13 +6,12 @@ import type { DVRSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 
-// VSeerr: the version name shown in request notifications, e.g. the event
-// "Movie Request Automatically Approved in German". Once a server has
-// versions, a standard request is named too ("in Standard"). Either way the
-// quality profile is added when the request used one other than the server's
-// default, e.g. "in German (German or English)" for a request option or
-// "in Standard (Anime dub-only)". Setups without versions keep Seerr's
-// wording.
+// VSeerr: the version shown in request notifications, as a "Version" field
+// next to "Requested By", e.g. "Version: German". Once a server has versions,
+// a standard request is named too ("Standard"). Either way the quality
+// profile is added when the request used one other than the server's
+// default, e.g. "German (German or English)" for a request option or
+// "Standard (Anime dub-only)". Setups without versions get no field.
 
 interface VersionRequest {
   type: MediaType;
@@ -148,6 +147,8 @@ export const requestNotificationLabel = async (
   return standardLabelFrom(request, servers, profileName);
 };
 
-/** Appends " in <version>" to a notification event. */
-export const withVersion = (event: string, label?: string): string =>
-  label ? `${event} in ${label}` : event;
+/** The "Version" field of a notification, or none without a version. */
+export const versionExtra = (
+  label?: string
+): { name: string; value: string }[] =>
+  label ? [{ name: 'Version', value: label }] : [];
