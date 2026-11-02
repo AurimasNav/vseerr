@@ -155,6 +155,61 @@ describe('getMediaVersions', () => {
     assert.strictEqual(versions[1].summary, undefined);
   });
 
+  it('shows a language-only format as its language', async () => {
+    // "Russian audio" tests only the Russian audio language (Radarr id 11).
+    hosts['radarr'] = {
+      '/customformat': [
+        FORMATS[0],
+        {
+          ...FORMATS[1],
+          specifications: [
+            {
+              implementation: 'LanguageSpecification',
+              negate: false,
+              fields: [
+                { name: 'value', value: 11 },
+                { name: 'exceptLanguage', value: false },
+              ],
+            },
+          ],
+        },
+        FORMATS[2],
+      ],
+      '/movie': [
+        {
+          id: 7,
+          qualityProfileId: 1,
+          hasFile: true,
+          originalLanguage: { id: 1, name: 'English' },
+        },
+      ],
+      '/moviefile': [
+        {
+          ...movieFile([1, 2]),
+          languages: [
+            { id: 1, name: 'English' },
+            { id: 11, name: 'Russian' },
+          ],
+        },
+      ],
+    };
+    hasMovie('radarr-ru', null);
+    const media = await seedMovie();
+
+    const { versions } = await getMediaVersions(media);
+
+    assert.deepStrictEqual(
+      versions[0].summary?.formats.map((f) => f.name),
+      ['REMUX']
+    );
+    assert.deepStrictEqual(versions[0].summary?.languages, [
+      { name: 'English', files: 1, original: true },
+      { name: 'Russian', files: 1, original: false, scored: true },
+    ]);
+    // Coverage still uses the format itself.
+    assert.deepStrictEqual(versions[1].coverage.coveredBy, { key: 'standard' });
+  });
+
   it('never lets an unreachable version cover another', async () => {
     hosts['radarr'] = { '/customformat': null };
     hasMovie('radarr-ru', [2]);
