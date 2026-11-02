@@ -94,6 +94,20 @@ describe('suggestDefiningFormats', () => {
     );
   });
 
+  it('does not suggest an unrelated bonus format', () => {
+    assert.deepStrictEqual(
+      suggestDefiningFormats({
+        minFormatScore: 45,
+        formatItems: [
+          { name: 'REMUX', score: 45 },
+          { name: 'Russian audio', score: 40 },
+          { name: 'Repack', score: 5 },
+        ],
+      }),
+      { formats: ['REMUX'], match: 'any' }
+    );
+  });
+
   it('suggests nothing without a minimum score', () => {
     assert.deepStrictEqual(
       suggestDefiningFormats({

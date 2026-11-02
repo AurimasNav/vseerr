@@ -239,6 +239,10 @@ export class MediaRequest {
       );
     }
 
+    // VSeerr: checked on the caller. Only request managers can request for
+    // someone else (Manage Users and Manage Requests, above), and they may
+    // request any version, so the caller is the requester whenever this
+    // check applies.
     if (
       isServiceSpecific &&
       !user.hasPermission(Permission.MANAGE_REQUESTS) &&

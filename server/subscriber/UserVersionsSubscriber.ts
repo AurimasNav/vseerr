@@ -31,13 +31,28 @@ export class UserVersionsSubscriber implements EntitySubscriberInterface<User> {
       return;
     }
 
+    // In a savepoint inside the transaction that saves the user (a
+    // transaction of its own when there is none). On Postgres a failed
+    // statement aborts the whole transaction, so without the savepoint a
+    // failed insert here would still fail the sign-in at commit, even
+    // though the error is caught.
+    const queryRunner = event.queryRunner;
+    let open = false;
     try {
+      await queryRunner.startTransaction();
+      open = true;
       user.requestServices = await setUserVersions(
         user.id,
         versions,
-        event.manager
+        queryRunner.manager
       );
+      await queryRunner.commitTransaction();
+      open = false;
     } catch (e) {
+      if (open) {
+        await queryRunner.rollbackTransaction();
+      }
+      user.requestServices = [];
       logger.error('Failed to store the versions of a new user', {
         label: 'Versions',
         userId: user.id,

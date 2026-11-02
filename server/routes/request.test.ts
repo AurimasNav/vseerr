@@ -2484,3 +2484,143 @@ describe('version request checks (review H2, M1, M2)', () => {
     );
   });
 });
+
+describe('who sees and uses version grants', () => {
+  const realAdapter = axios.defaults.adapter;
+
+  beforeEach(() => {
+    configureRadarr([
+      { name: 'Radarr' },
+      { name: 'Radarr German', buttonLabel: 'German' },
+    ]);
+    configureSonarr([{ name: 'Sonarr' }]);
+    axios.defaults.adapter = async (config: AxiosRequestConfig) =>
+      ({
+        data: [],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }) as never;
+    cacheManager.getCache('radarr').flush();
+  });
+
+  afterEach(() => {
+    axios.defaults.adapter = realAdapter;
+  });
+
+  async function user(email: string, permissions: number, services: string[]) {
+    const created = new User({
+      email,
+      username: email.split('@')[0],
+      userType: UserType.LOCAL,
+      permissions,
+      avatar: '',
+    });
+    await created.setPassword('test1234');
+    await getRepository(User).save(created);
+    await setUserVersions(created.id, services);
+    return created;
+  }
+
+  it('lets a request manager request a version for a user without its grant', async () => {
+    await user(
+      'manager@seerr.dev',
+      Permission.MANAGE_USERS | Permission.MANAGE_REQUESTS,
+      []
+    );
+    const other = await user('other@seerr.dev', Permission.REQUEST, []);
+    const manager = await loginAs('manager@seerr.dev', 'test1234');
+
+    const res = await manager.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 99931,
+      serverId: 1,
+      isServiceRequest: true,
+      userId: other.id,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.requestedBy.id, other.id);
+  });
+
+  it('does not let a user without Manage Requests request for someone else', async () => {
+    await user(
+      'helper@seerr.dev',
+      Permission.REQUEST | Permission.MANAGE_USERS,
+      ['radarr:1']
+    );
+    const other = await user('other2@seerr.dev', Permission.REQUEST, [
+      'radarr:1',
+    ]);
+    const helper = await loginAs('helper@seerr.dev', 'test1234');
+
+    const res = await helper.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 99932,
+      serverId: 1,
+      isServiceRequest: true,
+      userId: other.id,
+    });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('checks the grant when every server is a version', async () => {
+    configureRadarr([
+      { name: 'Radarr English', buttonLabel: 'English' },
+      { name: 'Radarr German', buttonLabel: 'German' },
+    ]);
+    await user('nogrant@seerr.dev', Permission.REQUEST, ['radarr:0']);
+    const agent = await loginAs('nogrant@seerr.dev', 'test1234');
+
+    const res = await agent.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 99934,
+      serverId: 1,
+      isServiceRequest: true,
+    });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('does not show other users which versions a user may request', async () => {
+    const owner = await user('owner@seerr.dev', Permission.REQUEST, [
+      'radarr:1',
+    ]);
+    const created = await (await loginAs('owner@seerr.dev', 'test1234'))
+      .post('/request')
+      .send({
+        mediaType: 'movie',
+        mediaId: 99933,
+        serverId: 1,
+        isServiceRequest: true,
+      });
+    assert.strictEqual(created.status, 201);
+    await user(
+      'viewer@seerr.dev',
+      Permission.REQUEST | Permission.REQUEST_VIEW,
+      []
+    );
+    const viewer = await loginAs('viewer@seerr.dev', 'test1234');
+
+    const list = await viewer.get('/request');
+    assert.strictEqual(list.status, 200);
+    const mine = list.body.results.find(
+      (r: { requestedBy: { id: number } }) => r.requestedBy.id === owner.id
+    );
+    assert.ok(mine, "the owner's request is listed");
+    assert.ok(!('requestServices' in mine.requestedBy));
+    assert.ok(!JSON.stringify(list.body).includes('radarr:1'));
+  });
+
+  it('still tells users which versions they may request themselves', async () => {
+    await user('self@seerr.dev', Permission.REQUEST, ['radarr:1']);
+    const self = await loginAs('self@seerr.dev', 'test1234');
+
+    const me = await self.get('/auth/me');
+
+    assert.strictEqual(me.status, 200);
+    assert.deepStrictEqual(me.body.requestServices, ['radarr:1']);
+  });
+});

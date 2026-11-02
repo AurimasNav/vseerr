@@ -41,6 +41,18 @@ export class VSeerrAddVersions1790680026383 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    // Version requests are rows in Seerr's media_request table, marked as
+    // versions in vseerr_version_request. Dropping only the marker would
+    // turn them into standard requests, so they are deleted first, as
+    // `vseerrDatabase remove` does.
+    if (await queryRunner.hasTable('vseerr_version_request')) {
+      await queryRunner.query(
+        `DELETE FROM "season_request" WHERE "requestId" IN (SELECT "requestId" FROM "vseerr_version_request")`
+      );
+      await queryRunner.query(
+        `DELETE FROM "media_request" WHERE "id" IN (SELECT "requestId" FROM "vseerr_version_request")`
+      );
+    }
     await queryRunner.query(`DROP TABLE IF EXISTS "vseerr_parked_request"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "vseerr_user_version"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "vseerr_version_request"`);
