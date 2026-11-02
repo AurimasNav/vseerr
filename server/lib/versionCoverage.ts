@@ -211,13 +211,22 @@ export const suggestDefiningFormats = (profile?: {
   if (required.length > 0) {
     return { formats: required, match: 'all' };
   }
-  // Otherwise a file needs any one format that reaches the minimum alone,
-  // or with the smallest bonus (a format split into "Atmos (not Remux)" 40
-  // plus "Atmos" 5 still reaches 45).
-  const smallest = Math.min(...positive.map((item) => item.score));
+  // Otherwise a file needs any one format that reaches the minimum alone, or
+  // together with the other part of its own split: "Atmos (not Remux)" 40
+  // plus "Atmos" 5 reaches 45. An unrelated bonus (Repack, a language) is
+  // never a reason on its own.
   return {
     formats: positive
-      .filter((item) => item.score + smallest >= minimum)
+      .filter(
+        (item) =>
+          item.score >= minimum ||
+          positive.some(
+            (part) =>
+              part !== item &&
+              normalize(item.name).includes(normalize(part.name)) &&
+              item.score + part.score >= minimum
+          )
+      )
       .map((item) => item.name),
     match: 'any',
   };

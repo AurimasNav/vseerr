@@ -54,6 +54,7 @@ authRoutes.get('/me', isAuthenticated(), async (req, res) => {
 
   return res.status(200).json({
     ...user.toJSON(),
+    requestServices: user.requestServices,
     settings: user.settings && {
       locale: user.settings.locale,
       discoverRegion: user.settings.discoverRegion,

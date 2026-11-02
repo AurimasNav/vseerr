@@ -51,9 +51,16 @@ export class User {
     'jellyfinAuthToken',
     'plexToken',
     'settings',
+    // VSeerr: which versions a user may request is for them and admins only.
+    'requestServices',
   ];
 
-  static readonly serializationExcludedFields: string[] = ['settings'];
+  // VSeerr: requestServices too, so other users' grants never ride along in
+  // nested users (requests, issues). /auth/me adds the user's own back.
+  static readonly serializationExcludedFields: string[] = [
+    'settings',
+    'requestServices',
+  ];
 
   public displayName: string;
 
