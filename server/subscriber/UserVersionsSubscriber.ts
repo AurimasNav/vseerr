@@ -1,8 +1,9 @@
 import { User } from '@server/entity/User';
+import { getSettings } from '@server/lib/settings';
 import {
   getDefaultVersions,
+  sanitizeVersions,
   setUserVersions,
-  wellFormedVersions,
 } from '@server/lib/versions';
 import logger from '@server/logger';
 import type { EntitySubscriberInterface, InsertEvent } from 'typeorm';
@@ -24,7 +25,7 @@ export class UserVersionsSubscriber implements EntitySubscriberInterface<User> {
       return;
     }
 
-    const given = wellFormedVersions(user.requestServices);
+    const given = sanitizeVersions(user.requestServices, getSettings());
     const versions = given.length > 0 ? given : getDefaultVersions();
     if (versions.length === 0) {
       return;

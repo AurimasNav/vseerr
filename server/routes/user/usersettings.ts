@@ -12,7 +12,7 @@ import type {
 } from '@server/interfaces/api/userSettingsInterfaces';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
-import { setUserVersions } from '@server/lib/versions';
+import { sanitizeVersions, setUserVersions } from '@server/lib/versions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { quickConnectSecret } from '@server/routes/auth';
@@ -790,9 +790,11 @@ userSettingsRoutes.post<
       await userRepository.save(user);
 
       if (req.body.requestServices !== undefined) {
+        // Only versions that exist: a grant for a server that is added
+        // later must not come alive with it.
         user.requestServices = await setUserVersions(
           user.id,
-          req.body.requestServices
+          sanitizeVersions(req.body.requestServices, getSettings())
         );
       }
 
