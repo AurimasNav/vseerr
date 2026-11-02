@@ -59,10 +59,69 @@ const VersionsPanel = ({
   const detailsFor = (key: string) =>
     fileDetails?.versions.find((v) => v.key === key);
   const standardDetails = detailsFor('standard');
+  const standardRequests = (media?.requests ?? [])
+    .filter(
+      (request) =>
+        !request.isServiceRequest &&
+        !request.is4k &&
+        ACTIVE_REQUEST_STATUSES.includes(request.status)
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
 
   if (versions.length === 0) {
     return null;
   }
+
+  const requestedByLine = (requests: Media['requests']) => {
+    const firstRequest = requests[0];
+    if (!firstRequest?.requestedBy) {
+      return null;
+    }
+    return (
+      <div className="mt-1 flex items-center justify-end text-xs font-normal text-gray-400">
+        {intl.formatMessage(
+          requests.length > 1 ? messages.requestedbymany : messages.requestedby,
+          {
+            count: requests.length - 1,
+            user: (
+              <Link
+                href={
+                  firstRequest.requestedBy.id === user?.id
+                    ? '/profile'
+                    : `/users/${firstRequest.requestedBy.id}`
+                }
+                className="mx-1 inline-flex items-center font-semibold text-gray-300 hover:text-white hover:underline"
+              >
+                <span className="avatar-sm mr-1">
+                  <CachedImage
+                    type="avatar"
+                    src={firstRequest.requestedBy.avatar}
+                    alt=""
+                    className="avatar-sm object-cover"
+                    width={16}
+                    height={16}
+                  />
+                </span>
+                {firstRequest.requestedBy.displayName}
+              </Link>
+            ),
+          }
+        )}
+        <span className="ml-1">
+          <FormattedRelativeTime
+            value={Math.floor(
+              (new Date(firstRequest.createdAt).getTime() - Date.now()) / 1000
+            )}
+            updateIntervalInSeconds={60}
+            numeric="auto"
+          />
+        </span>
+      </div>
+    );
+  };
 
   const rows = versions.map((version) => {
     const serviceStatus = media?.serviceStatuses?.find(
@@ -101,16 +160,17 @@ const VersionsPanel = ({
       {(standardDetails?.summary ||
         standardDetails?.coverage.coveredBy ||
         standardDetails?.coverage.requestedVia ||
-        standardDetails?.coverage.seasons) && (
+        standardDetails?.coverage.seasons ||
+        standardRequests.length > 0) && (
         <div className="media-fact flex-col items-stretch">
           <div className="flex justify-between">
             <span>{intl.formatMessage(messages.standard)}</span>
           </div>
           <VersionFileDetails details={standardDetails} />
+          {requestedByLine(standardRequests)}
         </div>
       )}
       {rows.map(({ version, status, requests }) => {
-        const firstRequest = requests[0];
         const isRequested =
           status !== MediaStatus.UNKNOWN && status !== MediaStatus.DELETED;
 
@@ -132,51 +192,7 @@ const VersionsPanel = ({
                 `${mediaType === 'tv' ? 'sonarr' : 'radarr'}:${version.id}`
               )}
             />
-            {firstRequest?.requestedBy && (
-              <div className="mt-1 flex items-center justify-end text-xs font-normal text-gray-400">
-                {intl.formatMessage(
-                  requests.length > 1
-                    ? messages.requestedbymany
-                    : messages.requestedby,
-                  {
-                    count: requests.length - 1,
-                    user: (
-                      <Link
-                        href={
-                          firstRequest.requestedBy.id === user?.id
-                            ? '/profile'
-                            : `/users/${firstRequest.requestedBy.id}`
-                        }
-                        className="mx-1 inline-flex items-center font-semibold text-gray-300 hover:text-white hover:underline"
-                      >
-                        <span className="avatar-sm mr-1">
-                          <CachedImage
-                            type="avatar"
-                            src={firstRequest.requestedBy.avatar}
-                            alt=""
-                            className="avatar-sm object-cover"
-                            width={16}
-                            height={16}
-                          />
-                        </span>
-                        {firstRequest.requestedBy.displayName}
-                      </Link>
-                    ),
-                  }
-                )}
-                <span className="ml-1">
-                  <FormattedRelativeTime
-                    value={Math.floor(
-                      (new Date(firstRequest.createdAt).getTime() -
-                        Date.now()) /
-                        1000
-                    )}
-                    updateIntervalInSeconds={60}
-                    numeric="auto"
-                  />
-                </span>
-              </div>
-            )}
+            {requestedByLine(requests)}
           </div>
         );
       })}

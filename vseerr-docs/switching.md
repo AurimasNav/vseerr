@@ -14,6 +14,7 @@ VSeerr keeps everything it adds in tables of its own, all named `vseerr_*`:
 | `vseerr_user_version` | Which versions each user may request |
 | `vseerr_service_status` | Availability of each title in each version |
 | `vseerr_parked_request` | Version requests set aside while Seerr uses the database |
+| `vseerr_user_preference` | Each user's default version and ticked request options |
 
 It does not add columns to Seerr's tables, and its tables have no foreign keys to them. Seerr ignores these tables, and Seerr's own database updates never touch them.
 

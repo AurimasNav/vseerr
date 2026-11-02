@@ -16,6 +16,7 @@ import { setUserVersions } from '@server/lib/versions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { quickConnectSecret } from '@server/routes/auth';
+import versionPreferenceRoutes from '@server/routes/user/versionPreferences';
 import { ApiError } from '@server/types/error';
 import { getHostname } from '@server/utils/getHostname';
 import {
@@ -28,6 +29,9 @@ import { Not } from 'typeorm';
 import { canMakePermissionsChange } from '.';
 
 const userSettingsRoutes = Router({ mergeParams: true });
+
+// VSeerr: request dialog preferences (default version, request options).
+userSettingsRoutes.use('/versions', versionPreferenceRoutes);
 
 userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
   '/main',

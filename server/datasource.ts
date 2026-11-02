@@ -14,6 +14,7 @@ import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
 import {
   ParkedRequest,
+  UserPreference,
   UserVersion,
   VersionRequest,
 } from '@server/entity/VSeerrVersions';
@@ -47,6 +48,7 @@ export const entities = [
   UserPushSubscription,
   UserSettings,
   ParkedRequest,
+  UserPreference,
   UserVersion,
   VersionRequest,
   Watchlist,

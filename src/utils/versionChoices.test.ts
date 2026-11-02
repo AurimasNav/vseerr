@@ -8,6 +8,8 @@ import {
   holdsOtherVersion,
   initialVersionChoice,
   optionApplies,
+  preferenceChanges,
+  versionRequesters,
 } from './versionChoices';
 
 const services = [
@@ -285,5 +287,143 @@ describe('version coverage', () => {
   it('ignores coverage for shows (seasons decide)', () => {
     const result = choices([], { coverage, mediaType: 'tv' });
     assert.ok(result.every((c) => c.coveredBy === undefined));
+  });
+});
+
+describe('preferenceChanges', () => {
+  const base = {
+    mediaType: 'movie' as const,
+    selected: 'radarr:2',
+    hasOptions: true,
+    optionId: null,
+  };
+
+  it('saves a new default version and the ticked option', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        saved: {},
+        useByDefault: true,
+        optionId: 'english-until-dubbed',
+      }),
+      {
+        'default-version-movie': 'radarr:2',
+        'option-movie-radarr:2': 'english-until-dubbed',
+      }
+    );
+  });
+
+  it('clears the default when it is unticked for that version', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        hasOptions: false,
+        saved: { 'default-version-movie': 'radarr:2' },
+        useByDefault: false,
+      }),
+      { 'default-version-movie': null }
+    );
+  });
+
+  it('keeps another version as default when this one is not ticked', () => {
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        hasOptions: false,
+        saved: { 'default-version-movie': 'standard' },
+        useByDefault: false,
+      }),
+      {}
+    );
+  });
+
+  it('removes an option that was unticked and skips unchanged ones', () => {
+    const saved = {
+      'default-version-movie': 'radarr:2',
+      'option-movie-radarr:2': 'english-until-dubbed',
+    };
+    assert.deepStrictEqual(
+      preferenceChanges({ ...base, saved, useByDefault: true, optionId: null }),
+      { 'option-movie-radarr:2': null }
+    );
+    assert.deepStrictEqual(
+      preferenceChanges({
+        ...base,
+        saved,
+        useByDefault: true,
+        optionId: 'english-until-dubbed',
+      }),
+      {}
+    );
+  });
+});
+
+describe('versionRequesters', () => {
+  const by = (
+    id: number,
+    serverId: number | undefined,
+    createdAt: string,
+    over: Record<string, unknown> = {}
+  ) => ({
+    requestedBy: { id, displayName: `user${id}` },
+    is4k: false,
+    isServiceRequest: serverId !== undefined,
+    serverId,
+    status: MediaRequestStatus.APPROVED,
+    createdAt,
+    ...over,
+  });
+  const title = (requests: ReturnType<typeof by>[]) =>
+    ({ requests }) as unknown as Media;
+
+  it('lists who requested each version, oldest first, once each', () => {
+    const requests = title([
+      by(3, 2, '2026-11-03'),
+      by(1, undefined, '2026-11-02'),
+      by(2, 2, '2026-11-01'),
+      by(3, 2, '2026-11-04'),
+    ]);
+    assert.deepStrictEqual(versionRequesters(requests, 'movie', 'radarr:2'), [
+      { id: 2, displayName: 'user2' },
+      { id: 3, displayName: 'user3' },
+    ]);
+    assert.deepStrictEqual(versionRequesters(requests, 'movie', 'standard'), [
+      { id: 1, displayName: 'user1' },
+    ]);
+    assert.deepStrictEqual(
+      versionRequesters(requests, 'movie', 'radarr:1'),
+      []
+    );
+  });
+
+  it('skips declined, failed and 4K requests', () => {
+    const requests = title([
+      by(1, 2, '2026-11-01', { status: MediaRequestStatus.DECLINED }),
+      by(2, 2, '2026-11-01', { status: MediaRequestStatus.FAILED }),
+      by(3, 2, '2026-11-01', { is4k: true }),
+    ]);
+    assert.deepStrictEqual(
+      versionRequesters(requests, 'movie', 'radarr:2'),
+      []
+    );
+  });
+
+  it('is part of every version choice', () => {
+    const [standard, german] = getVersionChoices({
+      mediaType: 'movie',
+      media: {
+        status: MediaStatus.PROCESSING,
+        serviceStatuses: [],
+        requests: [by(5, undefined, '2026-11-01')],
+      } as unknown as Media,
+      services,
+      userId: 7,
+      grants: ['radarr:1'],
+      isManager: false,
+    });
+    assert.deepStrictEqual(standard.requesters, [
+      { id: 5, displayName: 'user5' },
+    ]);
+    assert.deepStrictEqual(german.requesters, []);
   });
 });
