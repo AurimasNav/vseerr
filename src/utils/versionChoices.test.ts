@@ -86,6 +86,18 @@ describe('getVersionChoices', () => {
     assert.ok(result.find((c) => c.key === 'radarr:1')?.requestable);
   });
 
+  it('keeps other versions open when one version per title is off', () => {
+    const result = choices([request(7, 1)], { oneVersionPerTitle: false });
+    assert.deepStrictEqual(
+      result.map((c) => [c.key, c.requestable, c.otherVersionHeld]),
+      [
+        ['standard', true, false],
+        ['radarr:1', false, false],
+        ['radarr:2', true, false],
+      ]
+    );
+  });
+
   it('does not limit request managers', () => {
     const result = choices([request(7, 1)], { isManager: true, grants: [] });
     assert.deepStrictEqual(

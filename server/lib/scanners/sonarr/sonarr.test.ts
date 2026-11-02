@@ -1221,4 +1221,70 @@ describe('Sonarr Scanner', () => {
       );
     });
   });
+
+  describe('version servers', () => {
+    const STANDARD = 0;
+    const LITHUANIAN = 1;
+
+    function scanWithVersion(): Promise<void> {
+      configureSonarr([
+        { id: STANDARD, hostname: 'sonarr' },
+        { id: LITHUANIAN, hostname: 'sonarr-lt', buttonLabel: 'Lithuanian' },
+      ]);
+      getShowByTvdbIdImpl = async ({ tvdbId }) =>
+        fakeTmdbShow(tvdbId === 100 ? 1 : 2);
+      getTvShowImpl = async ({ tvId }) => fakeTmdbShow(tvId);
+      const responses = [
+        [fakeSonarrSeries({ tvdbId: 200, id: 99 })],
+        [fakeSonarrSeries({ tvdbId: 100, id: 20 })],
+      ];
+      let call = 0;
+      getSeriesImpl = async () => responses[call++] ?? [];
+      return runWithMockTimers(() => sonarrScanner.run());
+    }
+
+    it('records a version-only show without touching the standard seasons', async () => {
+      await scanWithVersion();
+
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 1 },
+      });
+      assert.strictEqual(media.status, MediaStatus.UNKNOWN);
+      assert.strictEqual(media.serviceId, null);
+      assert.deepStrictEqual(media.seasons, []);
+      const row = await getRepository(MediaServiceStatus).findOneOrFail({
+        where: { mediaId: media.id, serviceId: LITHUANIAN },
+      });
+      assert.strictEqual(row.status, MediaStatus.AVAILABLE);
+      assert.deepStrictEqual(row.seasonStatuses, { 1: MediaStatus.AVAILABLE });
+    });
+
+    it('gives seasons that only the version has their standard status back', async () => {
+      await getRepository(Media).save(
+        new Media({
+          tmdbId: 1,
+          tvdbId: 100,
+          mediaType: MediaType.TV,
+          status: MediaStatus.AVAILABLE,
+          serviceId: LITHUANIAN,
+          externalServiceId: 20,
+          seasons: [
+            new Season({ seasonNumber: 1, status: MediaStatus.AVAILABLE }),
+          ],
+        })
+      );
+
+      await scanWithVersion();
+
+      const media = await getRepository(Media).findOneOrFail({
+        where: { tmdbId: 1 },
+      });
+      assert.strictEqual(media.status, MediaStatus.UNKNOWN);
+      assert.strictEqual(media.serviceId, null);
+      assert.deepStrictEqual(
+        media.seasons.map((season) => season.status),
+        [MediaStatus.UNKNOWN]
+      );
+    });
+  });
 });

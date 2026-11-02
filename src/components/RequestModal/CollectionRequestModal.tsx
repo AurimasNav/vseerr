@@ -7,6 +7,7 @@ import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import VersionPicker from '@app/components/RequestModal/VersionPicker';
 import { getStatusLabel } from '@app/components/StatusBadge';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import useVersionChoice from '@app/hooks/useVersionChoice';
@@ -72,6 +73,7 @@ const CollectionRequestModal = ({
   });
   const intl = useIntl();
   const { user, hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   const { data: quota } = useSWR<QuotaResponse>(
     user &&
       (!requestOverrides?.user?.id || hasPermission(Permission.MANAGE_USERS))
@@ -96,6 +98,7 @@ const CollectionRequestModal = ({
   const isHeldElsewhere = (part: MovieResult): boolean =>
     !is4k &&
     !isManager &&
+    currentSettings.oneVersionPerTitle &&
     holdsOtherVersion(part.mediaInfo, user?.id, 'movie', requestServerId);
   const selectedService =
     requestServerId != null

@@ -5,6 +5,7 @@ import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
+  sanitizeCoverageMode,
   sanitizeDefiningFormats,
   sanitizeDefiningMatch,
 } from '@server/lib/versionCoverage';
@@ -28,6 +29,7 @@ sonarrRoutes.post('/', async (req, res) => {
     newSonarr.definingFormats
   );
   newSonarr.definingMatch = sanitizeDefiningMatch(newSonarr.definingMatch);
+  newSonarr.coverageMode = sanitizeCoverageMode(newSonarr.coverageMode);
   const lastItem = settings.sonarr[settings.sonarr.length - 1];
   newSonarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -122,6 +124,7 @@ sonarrRoutes.put<{ id: string }>('/:id', async (req, res) => {
     requestOptions: sanitizeRequestOptions(req.body.requestOptions),
     definingFormats: sanitizeDefiningFormats(req.body.definingFormats),
     definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
+    coverageMode: sanitizeCoverageMode(req.body.coverageMode),
   } as SonarrSettings;
   await settings.save();
 

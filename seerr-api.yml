@@ -240,12 +240,40 @@ components:
       type: object
       required:
         - defaultVersions
+        - holdHours
+        - oneVersionPerTitle
       properties:
         defaultVersions:
           type: array
           items:
             type: string
             example: 'radarr:1'
+        holdHours:
+          type: number
+          minimum: 0
+          maximum: 720
+          description: Hours a fresh request in one version holds back the versions it may cover. 0 turns the hold off.
+          example: 24
+        oneVersionPerTitle:
+          type: boolean
+          description: Users without Manage Requests request one version of each title.
+          example: true
+    DefaultVersionsUpdate:
+      type: object
+      properties:
+        defaultVersions:
+          type: array
+          items:
+            type: string
+            example: 'radarr:1'
+        holdHours:
+          type: number
+          minimum: 0
+          maximum: 720
+          example: 24
+        oneVersionPerTitle:
+          type: boolean
+          example: true
     MainSettings:
       type: object
       properties:
@@ -689,6 +717,11 @@ components:
           enum: [all, any]
           description: VSeerr. Whether a file needs all defining formats or any one of them.
           example: all
+        coverageMode:
+          type: string
+          enum: [formats, anyFile, never]
+          description: VSeerr. What lets another version cover this one. `formats` (default) needs a file with the defining formats, `anyFile` takes any file of another version, `never` turns coverage off for this version.
+          example: formats
       required:
         - name
         - hostname
@@ -793,6 +826,11 @@ components:
           enum: [all, any]
           description: VSeerr. Whether a file needs all defining formats or any one of them.
           example: all
+        coverageMode:
+          type: string
+          enum: [formats, anyFile, never]
+          description: VSeerr. What lets another version cover this one. `formats` (default) needs a file with the defining formats, `anyFile` takes any file of another version, `never` turns coverage off for this version.
+          example: formats
       required:
         - name
         - hostname
@@ -2437,8 +2475,8 @@ paths:
                 $ref: '#/components/schemas/MainSettings'
   /settings/versions:
     get:
-      summary: Get default versions
-      description: Returns the versions that new users may request by default. Each entry is `radarr:<id>` or `sonarr:<id>`. The `ADMIN` permission is required.
+      summary: Get default versions and version request rules
+      description: Returns the versions that new users may request by default (each entry is `radarr:<id>` or `sonarr:<id>`), how long a fresh request in one version holds back the others, and whether users request one version of each title. The `ADMIN` permission is required.
       tags:
         - settings
       responses:
@@ -2449,8 +2487,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/DefaultVersions'
     post:
-      summary: Update default versions
-      description: Replaces the versions that new users may request by default. Entries that do not match a configured version are dropped. The `ADMIN` permission is required.
+      summary: Update default versions and version request rules
+      description: Saves the fields that are sent. `defaultVersions` replaces the versions that new users may request by default; entries that do not match a configured version are dropped. The `ADMIN` permission is required.
       tags:
         - settings
       requestBody:
@@ -2458,16 +2496,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DefaultVersions'
+              $ref: '#/components/schemas/DefaultVersionsUpdate'
       responses:
         '200':
-          description: The saved default versions
+          description: The saved settings
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DefaultVersions'
         '400':
-          description: '`defaultVersions` is not a list'
+          description: No field was sent, or a field is invalid
   /settings/jellyfin:
     get:
       summary: Get Jellyfin settings

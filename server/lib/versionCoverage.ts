@@ -3,14 +3,26 @@
 // example "Russian audio" for a Russian version). When another version's
 // file matches all of them, the version is covered: it shows as available
 // through the other version, and only request managers can request it.
-// While another version's request is younger than a day and has no file
-// yet, the version is held back too, because that file may cover it.
+// While another version's request is younger than the hold time (a day by
+// default) and has no file yet, the version is held back too, because that
+// file may cover it. A server's coverage mode can instead let any file of
+// another version cover it, or turn coverage off for it.
 //
 // This file is shared by the server and the request dialog, so it must stay
 // free of server-only imports.
 
-/** How long a fresh request in one version holds back the others. */
+/** How long a fresh request in one version holds back the others, by default. */
 export const REQUEST_HOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * What lets another version cover this one:
+ * - `formats`: a file with this version's defining formats (the default);
+ * - `anyFile`: any file of another version;
+ * - `never`: nothing, the version can always be requested.
+ */
+export type CoverageMode = 'formats' | 'anyFile' | 'never';
+
+export const COVERAGE_MODES: CoverageMode[] = ['formats', 'anyFile', 'never'];
 
 export const MAX_DEFINING_FORMATS = 20;
 const MAX_FORMAT_NAME = 100;
@@ -92,6 +104,8 @@ export interface CoverageFile {
 export interface CoverageVersionInput extends CoverageRef {
   definingFormats: string[];
   definingMatch?: DefiningMatch;
+  /** Defaults to `formats`. */
+  coverageMode?: CoverageMode;
   /** Custom format names that exist in this version's instance. */
   instanceFormats: string[];
   /** Movie: the file, or null when there is none. */
@@ -154,6 +168,23 @@ export const sanitizeDefiningFormats = (value: unknown): string[] => {
 
 export const sanitizeDefiningMatch = (value: unknown): DefiningMatch =>
   value === 'any' ? 'any' : 'all';
+
+export const sanitizeCoverageMode = (value: unknown): CoverageMode =>
+  COVERAGE_MODES.includes(value as CoverageMode)
+    ? (value as CoverageMode)
+    : 'formats';
+
+/** Whether this server's version can be covered by another version at all. */
+export const canBeCovered = (server: {
+  coverageMode?: CoverageMode;
+  definingFormats?: string[];
+}): boolean => {
+  const mode = sanitizeCoverageMode(server.coverageMode);
+  return (
+    mode === 'anyFile' ||
+    (mode === 'formats' && (server.definingFormats ?? []).length > 0)
+  );
+};
 
 /**
  * Suggests defining formats from a quality profile, using its minimum
@@ -224,12 +255,13 @@ const ref = ({ key, label }: CoverageRef): CoverageRef =>
 const holdFrom = (
   holder: CoverageVersionInput,
   requestedAt: Date | null | undefined,
-  now: Date
+  now: Date,
+  holdMs: number
 ): CoverageHold | undefined => {
-  if (!requestedAt) {
+  if (!requestedAt || holdMs <= 0) {
     return undefined;
   }
-  const until = requestedAt.getTime() + REQUEST_HOLD_MS;
+  const until = requestedAt.getTime() + holdMs;
   if (until <= now.getTime()) {
     return undefined;
   }
@@ -239,7 +271,11 @@ const holdFrom = (
 /** Works out, for every version, whether another version covers it. */
 export const computeCoverage = (
   versions: CoverageVersionInput[],
-  { mediaType, now = new Date() }: { mediaType: 'movie' | 'tv'; now?: Date }
+  {
+    mediaType,
+    now = new Date(),
+    holdMs = REQUEST_HOLD_MS,
+  }: { mediaType: 'movie' | 'tv'; now?: Date; holdMs?: number }
 ): VersionCoverageResult[] =>
   versions.map((target) => {
     const match = target.definingMatch ?? 'all';
@@ -249,26 +285,29 @@ export const computeCoverage = (
       definingMatch: match,
     };
     const defining = target.definingFormats;
-    if (defining.length === 0) {
+    if (!canBeCovered(target)) {
       return result;
     }
+    const anyFile = sanitizeCoverageMode(target.coverageMode) === 'anyFile';
+    const covers = (file: CoverageFile) =>
+      anyFile || fileMatches(file, defining, match);
+    const couldCover = (holder: CoverageVersionInput) =>
+      anyFile || canCover(holder, defining, match);
     const others = versions.filter((v) => v.key !== target.key);
 
     if (mediaType === 'movie') {
       if (target.file) {
         return result;
       }
-      const cover = others.find(
-        (other) => other.file && fileMatches(other.file, defining, match)
-      );
+      const cover = others.find((other) => other.file && covers(other.file));
       if (cover) {
         result.coveredBy = ref(cover);
         return result;
       }
       for (const other of others) {
         const hold =
-          !other.file && canCover(other, defining, match)
-            ? holdFrom(other, other.openRequestAt, now)
+          !other.file && couldCover(other)
+            ? holdFrom(other, other.openRequestAt, now, holdMs)
             : undefined;
         if (hold) {
           result.requestedVia = hold;
@@ -298,7 +337,7 @@ export const computeCoverage = (
         return (
           files.length > 0 &&
           (other.completeSeasons ?? []).includes(season) &&
-          files.every((file) => fileMatches(file, defining, match))
+          files.every(covers)
         );
       });
       if (cover) {
@@ -307,9 +346,8 @@ export const computeCoverage = (
       }
       for (const other of others) {
         const hold =
-          (other.seasonFiles?.[season] ?? []).length === 0 &&
-          canCover(other, defining, match)
-            ? holdFrom(other, other.openSeasonRequestAt?.[season], now)
+          (other.seasonFiles?.[season] ?? []).length === 0 && couldCover(other)
+            ? holdFrom(other, other.openSeasonRequestAt?.[season], now, holdMs)
             : undefined;
         if (hold) {
           seasons[season] = { requestedVia: hold };

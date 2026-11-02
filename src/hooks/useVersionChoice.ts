@@ -1,3 +1,4 @@
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import type { VersionKey } from '@app/utils/versionChoices';
 import {
@@ -43,6 +44,7 @@ const useVersionChoice = ({
   onChange?: () => void;
 }) => {
   const { user, hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   const { data: services } = useSWR<ServiceCommonServer[]>(
     enabled
       ? mediaType === 'movie'
@@ -108,6 +110,7 @@ const useVersionChoice = ({
         grants: user?.requestServices ?? [],
         isManager: hasPermission(Permission.MANAGE_REQUESTS),
         coverage: mediaVersions?.versions.map((v) => v.coverage),
+        oneVersionPerTitle: currentSettings.oneVersionPerTitle,
       })
     : [];
   const remembered = saved[defaultVersionPreference(mediaType)] ?? null;

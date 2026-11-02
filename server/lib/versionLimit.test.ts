@@ -155,6 +155,19 @@ describe('one version per title', () => {
     assert.strictEqual(await getRepository(MediaRequest).count(), 2);
   });
 
+  it('allows several versions when the rule is turned off', async () => {
+    getSettings().main.oneVersionPerTitle = false;
+    try {
+      const user = await createUser('nine@seerr.dev');
+      await MediaRequest.request(movie(1008, 1), user);
+      await MediaRequest.request(movie(1008, 2), user);
+      await MediaRequest.request(movie(1008), user);
+      assert.strictEqual(await getRepository(MediaRequest).count(), 3);
+    } finally {
+      delete getSettings().main.oneVersionPerTitle;
+    }
+  });
+
   it('does not limit request managers', async () => {
     const manager = await createUser(
       'eight@seerr.dev',

@@ -7,6 +7,7 @@ import {
   computeCoverage,
   fileMatches,
   languageOnlyFormat,
+  sanitizeCoverageMode,
   sanitizeDefiningFormats,
   sanitizeDefiningMatch,
   suggestDefiningFormats,
@@ -214,6 +215,83 @@ describe('computeCoverage (movies)', () => {
       { mediaType: 'movie', now: NOW }
     );
     assert.strictEqual(ru.requestedVia, undefined);
+  });
+});
+
+describe('computeCoverage, coverage modes and hold time', () => {
+  const ruWebDl = russian({ file: { formats: ['Russian audio'] } });
+
+  it('lets any file cover a version in anyFile mode', () => {
+    const [std] = computeCoverage(
+      [standard({ coverageMode: 'anyFile' }), ruWebDl],
+      { mediaType: 'movie', now: NOW }
+    );
+    assert.deepStrictEqual(std.coveredBy, {
+      key: 'radarr:1',
+      label: 'Russian',
+    });
+  });
+
+  it('covers in anyFile mode without defining formats', () => {
+    const [std] = computeCoverage(
+      [standard({ coverageMode: 'anyFile', definingFormats: [] }), ruWebDl],
+      { mediaType: 'movie', now: NOW }
+    );
+    assert.strictEqual(std.coveredBy?.key, 'radarr:1');
+  });
+
+  it('never covers or holds a version in never mode', () => {
+    const [std] = computeCoverage(
+      [
+        standard({ coverageMode: 'never' }),
+        russian({ file: { formats: ['Russian audio', 'REMUX'] } }),
+      ],
+      { mediaType: 'movie', now: NOW }
+    );
+    assert.strictEqual(std.coveredBy, undefined);
+    const [, ru] = computeCoverage(
+      [
+        standard({ openRequestAt: new Date(NOW.getTime() - 1000) }),
+        russian({ coverageMode: 'never' }),
+      ],
+      { mediaType: 'movie', now: NOW }
+    );
+    assert.strictEqual(ru.requestedVia, undefined);
+  });
+
+  it('holds for the configured time and not at all with 0', () => {
+    const requestedAt = new Date(NOW.getTime() - 2 * 60 * 60 * 1000);
+    const input = [standard({ openRequestAt: requestedAt }), russian()];
+    const hour = 60 * 60 * 1000;
+
+    const [, short] = computeCoverage(input, {
+      mediaType: 'movie',
+      now: NOW,
+      holdMs: hour,
+    });
+    assert.strictEqual(short.requestedVia, undefined);
+
+    const [, long] = computeCoverage(input, {
+      mediaType: 'movie',
+      now: NOW,
+      holdMs: 3 * hour,
+    });
+    assert.strictEqual(
+      long.requestedVia?.until,
+      new Date(requestedAt.getTime() + 3 * hour).toISOString()
+    );
+
+    const [, off] = computeCoverage(
+      [standard({ openRequestAt: new Date(NOW.getTime() - 1000) }), russian()],
+      { mediaType: 'movie', now: NOW, holdMs: 0 }
+    );
+    assert.strictEqual(off.requestedVia, undefined);
+  });
+
+  it('defaults unknown modes to formats', () => {
+    assert.strictEqual(sanitizeCoverageMode('anyFile'), 'anyFile');
+    assert.strictEqual(sanitizeCoverageMode('bogus'), 'formats');
+    assert.strictEqual(sanitizeCoverageMode(undefined), 'formats');
   });
 });
 

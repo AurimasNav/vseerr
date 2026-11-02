@@ -17,6 +17,7 @@ import { getMediaVersions } from '@server/lib/mediaVersions';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { isVersionRequestSql } from '@server/lib/versionSql';
+import { versionServerIds } from '@server/lib/versions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -246,9 +247,17 @@ mediaRoutes.delete(
         }
 
         const specificServiceId = is4k ? media.serviceId4k : media.serviceId;
+        // VSeerr: the standard delete never reaches a version's server; a
+        // version's file is removed through its own entry.
+        const isVersionServer =
+          specificServiceId != null &&
+          versionServerIds(isMovie ? settings.radarr : settings.sonarr).has(
+            specificServiceId
+          );
         if (
           specificServiceId &&
           specificServiceId >= 0 &&
+          !isVersionServer &&
           serviceSettings?.id !== specificServiceId
         ) {
           if (isMovie) {

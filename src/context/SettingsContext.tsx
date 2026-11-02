@@ -34,6 +34,7 @@ const defaultSettings = {
   youtubeUrl: '',
   versionCheck: true,
   plexClientIdentifier: '',
+  oneVersionPerTitle: true,
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

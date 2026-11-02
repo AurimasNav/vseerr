@@ -1,5 +1,5 @@
 import defineMessages from '@app/utils/defineMessages';
-import type { DefiningMatch } from '@server/lib/versionCoverage';
+import type { CoverageMode, DefiningMatch } from '@server/lib/versionCoverage';
 import { useIntl } from 'react-intl';
 import Select from 'react-select';
 
@@ -17,6 +17,12 @@ const messages = defineMessages('components.Settings.DefiningFormatsEditor', {
     'Also used when this is the standard server: another version can then cover the standard version.',
   suggestion: "Suggested from the default profile's minimum score: {formats}",
   useSuggestion: 'Use',
+  coverageMode: 'Covered By Other Versions',
+  coverageModeHelp:
+    'When another version has the title, this version can show as available through it. Only users with Manage Requests can then request it.',
+  modeFormats: 'When their file has the defining formats',
+  modeAnyFile: 'When they have any file',
+  modeNever: 'Never',
 });
 
 interface OptionType {
@@ -27,8 +33,10 @@ interface OptionType {
 interface DefiningFormatsEditorProps {
   value: string[];
   match: DefiningMatch;
+  mode: CoverageMode;
   onChange: (value: string[]) => void;
   onMatchChange: (match: DefiningMatch) => void;
+  onModeChange: (mode: CoverageMode) => void;
   /** Custom format names of the instance, from the connection test. */
   customFormats?: string[];
   /** Suggested from the default profile, from the connection test. */
@@ -42,8 +50,10 @@ interface DefiningFormatsEditorProps {
 const DefiningFormatsEditor = ({
   value,
   match,
+  mode,
   onChange,
   onMatchChange,
+  onModeChange,
   customFormats = [],
   suggestion,
   isValidated,
@@ -66,77 +76,111 @@ const DefiningFormatsEditor = ({
     label: name,
   }));
 
+  const modeLabels: Record<CoverageMode, string> = {
+    formats: intl.formatMessage(messages.modeFormats),
+    anyFile: intl.formatMessage(messages.modeAnyFile),
+    never: intl.formatMessage(messages.modeNever),
+  };
+
   return (
-    <div className="form-row">
-      <label htmlFor="definingFormats" className="text-label">
-        {intl.formatMessage(messages.definingFormats)}
-        <span className="label-tip">
-          {intl.formatMessage(messages.definingFormatsHelp)}
-        </span>
-        {!hasVersionName && (
+    <>
+      <div className="form-row">
+        <label htmlFor="coverageMode" className="text-label">
+          {intl.formatMessage(messages.coverageMode)}
           <span className="label-tip">
-            {intl.formatMessage(messages.standardHint)}
+            {intl.formatMessage(messages.coverageModeHelp)}
           </span>
-        )}
-      </label>
-      <div className="form-input-area">
-        <Select<OptionType, true>
-          inputId="definingFormats"
-          options={options}
-          isMulti
-          isDisabled={!isValidated && value.length === 0}
-          placeholder={intl.formatMessage(
-            isValidated ? messages.select : messages.testFirst
-          )}
-          className="react-select-container"
-          classNamePrefix="react-select"
-          value={value.map((name) => ({ value: name, label: name }))}
-          onChange={(selected) =>
-            onChange(selected.map((option) => option.value))
-          }
-          noOptionsMessage={() => intl.formatMessage(messages.noOptions)}
-        />
-        {suggested && (
-          <div className="mt-2 flex items-center gap-2 text-sm text-gray-400">
-            <span>
-              {intl.formatMessage(messages.suggestion, {
-                formats: suggested.formats.join(
-                  suggested.match === 'any' ? ' / ' : ' + '
-                ),
-              })}
-            </span>
-            <button
-              type="button"
-              className="text-indigo-400 underline hover:text-indigo-300"
-              onClick={() => {
-                onChange(suggested.formats);
-                onMatchChange(suggested.match);
-              }}
+        </label>
+        <div className="form-input-area">
+          <div className="form-input-field">
+            <select
+              id="coverageMode"
+              name="coverageMode"
+              value={mode}
+              onChange={(e) => onModeChange(e.target.value as CoverageMode)}
             >
-              {intl.formatMessage(messages.useSuggestion)}
-            </button>
+              {(['formats', 'anyFile', 'never'] as const).map((m) => (
+                <option key={m} value={m}>
+                  {modeLabels[m]}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-        {value.length > 1 && (
-          <div className="mt-2 flex flex-col gap-1 text-sm text-gray-300">
-            {(['all', 'any'] as const).map((mode) => (
-              <label key={mode} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="definingMatch"
-                  className="h-4 w-4 border-gray-500 bg-gray-800 text-indigo-600 focus:ring-indigo-500"
-                  checked={match === mode}
-                  onChange={() => onMatchChange(mode)}
-                />
-                {intl.formatMessage(
-                  mode === 'all' ? messages.matchAll : messages.matchAny
-                )}
-              </label>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
-    </div>
+      {mode === 'formats' && (
+        <div className="form-row">
+          <label htmlFor="definingFormats" className="text-label">
+            {intl.formatMessage(messages.definingFormats)}
+            <span className="label-tip">
+              {intl.formatMessage(messages.definingFormatsHelp)}
+            </span>
+            {!hasVersionName && (
+              <span className="label-tip">
+                {intl.formatMessage(messages.standardHint)}
+              </span>
+            )}
+          </label>
+          <div className="form-input-area">
+            <Select<OptionType, true>
+              inputId="definingFormats"
+              options={options}
+              isMulti
+              isDisabled={!isValidated && value.length === 0}
+              placeholder={intl.formatMessage(
+                isValidated ? messages.select : messages.testFirst
+              )}
+              className="react-select-container"
+              classNamePrefix="react-select"
+              value={value.map((name) => ({ value: name, label: name }))}
+              onChange={(selected) =>
+                onChange(selected.map((option) => option.value))
+              }
+              noOptionsMessage={() => intl.formatMessage(messages.noOptions)}
+            />
+            {suggested && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-gray-400">
+                <span>
+                  {intl.formatMessage(messages.suggestion, {
+                    formats: suggested.formats.join(
+                      suggested.match === 'any' ? ' / ' : ' + '
+                    ),
+                  })}
+                </span>
+                <button
+                  type="button"
+                  className="text-indigo-400 underline hover:text-indigo-300"
+                  onClick={() => {
+                    onChange(suggested.formats);
+                    onMatchChange(suggested.match);
+                  }}
+                >
+                  {intl.formatMessage(messages.useSuggestion)}
+                </button>
+              </div>
+            )}
+            {value.length > 1 && (
+              <div className="mt-2 flex flex-col gap-1 text-sm text-gray-300">
+                {(['all', 'any'] as const).map((mode) => (
+                  <label key={mode} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="definingMatch"
+                      className="h-4 w-4 border-gray-500 bg-gray-800 text-indigo-600 focus:ring-indigo-500"
+                      checked={match === mode}
+                      onChange={() => onMatchChange(mode)}
+                    />
+                    {intl.formatMessage(
+                      mode === 'all' ? messages.matchAll : messages.matchAny
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

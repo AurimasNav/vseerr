@@ -254,6 +254,7 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
           requestOptions: radarr?.requestOptions ?? [],
           definingFormats: radarr?.definingFormats ?? [],
           definingMatch: radarr?.definingMatch ?? 'all',
+          coverageMode: radarr?.coverageMode ?? 'formats',
         }}
         validationSchema={RadarrSettingsSchema}
         onSubmit={async (values) => {
@@ -290,6 +291,7 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                   : [],
               definingFormats: values.is4k ? [] : values.definingFormats,
               definingMatch: values.definingMatch,
+              coverageMode: values.coverageMode,
             };
             if (!radarr) {
               await axios.post('/api/v1/settings/radarr', submission);
@@ -820,10 +822,12 @@ const RadarrModal = ({ onClose, radarr, onSave }: RadarrModalProps) => {
                 <DefiningFormatsEditor
                   value={values.definingFormats}
                   match={values.definingMatch}
+                  mode={values.coverageMode}
                   onChange={(value) => setFieldValue('definingFormats', value)}
                   onMatchChange={(match) =>
                     setFieldValue('definingMatch', match)
                   }
+                  onModeChange={(mode) => setFieldValue('coverageMode', mode)}
                   customFormats={testResponse.customFormats}
                   suggestion={
                     testResponse.definingSuggestions?.[

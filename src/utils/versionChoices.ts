@@ -154,6 +154,7 @@ export const getVersionChoices = ({
   isManager,
   standardRequestable,
   coverage = [],
+  oneVersionPerTitle = true,
 }: {
   mediaType: 'movie' | 'tv';
   media?: Pick<Media, 'status' | 'requests' | 'serviceStatuses'>;
@@ -168,10 +169,12 @@ export const getVersionChoices = ({
   standardRequestable?: boolean;
   /** Coverage per version from `/api/v1/media/:id/versions`. */
   coverage?: VersionCoverageResult[];
+  /** Settings → Users: users request one version of each title. */
+  oneVersionPerTitle?: boolean;
 }): VersionChoice[] => {
   const held = heldVersions(media, userId, mediaType);
   const closedByOtherVersion = (key: VersionKey) =>
-    !isManager && held.size > 0 && !held.has(key);
+    oneVersionPerTitle && !isManager && held.size > 0 && !held.has(key);
   const blocklisted = media?.status === MediaStatus.BLOCKLISTED;
   // Coverage closes a version to users without Manage Requests (movies; for
   // shows it applies per season in the season list).

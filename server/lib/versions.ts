@@ -51,6 +51,56 @@ export const isVersionDestination = (
   );
 };
 
+/**
+ * Ids of the non-4K servers that hold versions, when a non-4K server without
+ * a version name (the standard one) exists too. Their titles belong to their
+ * version only: scans keep them out of the standard status. Setups where
+ * every server is a version keep Seerr's behaviour (empty set).
+ */
+export const versionServerIds = (
+  servers: { id: number; buttonLabel?: string; is4k?: boolean }[]
+): Set<number> => {
+  const nonUhd = servers.filter((server) => !server.is4k);
+  if (!nonUhd.some((server) => !server.buttonLabel?.trim())) {
+    return new Set();
+  }
+  return new Set(
+    nonUhd
+      .filter((server) => !!server.buttonLabel?.trim())
+      .map((server) => server.id)
+  );
+};
+
+export interface VersionRules {
+  /** How long a fresh request in one version holds back the others; 0 = off. */
+  holdHours: number;
+  /** Users without Manage Requests request one version of each title. */
+  oneVersionPerTitle: boolean;
+}
+
+export const DEFAULT_HOLD_HOURS = 24;
+export const MAX_HOLD_HOURS = 24 * 30;
+
+/** Hours from settings or a request body; anything invalid falls back to the default. */
+export const sanitizeHoldHours = (value: unknown): number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= MAX_HOLD_HOURS
+    ? Math.round(value * 10) / 10
+    : DEFAULT_HOLD_HOURS;
+
+/** The version request rules from Settings → Users. */
+export const getVersionRules = (
+  main: Pick<
+    MainSettings,
+    'versionHoldHours' | 'oneVersionPerTitle'
+  > = getSettings().main
+): VersionRules => ({
+  holdHours: sanitizeHoldHours(main.versionHoldHours ?? DEFAULT_HOLD_HOURS),
+  oneVersionPerTitle: main.oneVersionPerTitle !== false,
+});
+
 /** Version identifiers that exist in the given settings. */
 export const configuredVersions = (settings: VersionSettings): string[] => [
   ...settings.radarr

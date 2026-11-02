@@ -273,6 +273,7 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
           requestOptions: sonarr?.requestOptions ?? [],
           definingFormats: sonarr?.definingFormats ?? [],
           definingMatch: sonarr?.definingMatch ?? 'all',
+          coverageMode: sonarr?.coverageMode ?? 'formats',
           monitorNewItems: sonarr?.monitorNewItems ?? 'all',
         }}
         validationSchema={SonarrSettingsSchema}
@@ -327,6 +328,7 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                   : [],
               definingFormats: values.is4k ? [] : values.definingFormats,
               definingMatch: values.definingMatch,
+              coverageMode: values.coverageMode,
               monitorNewItems: values.monitorNewItems,
             };
             if (!sonarr) {
@@ -1157,10 +1159,12 @@ const SonarrModal = ({ onClose, sonarr, onSave }: SonarrModalProps) => {
                 <DefiningFormatsEditor
                   value={values.definingFormats}
                   match={values.definingMatch}
+                  mode={values.coverageMode}
                   onChange={(value) => setFieldValue('definingFormats', value)}
                   onMatchChange={(match) =>
                     setFieldValue('definingMatch', match)
                   }
+                  onModeChange={(mode) => setFieldValue('coverageMode', mode)}
                   customFormats={testResponse.customFormats}
                   suggestion={
                     testResponse.definingSuggestions?.[

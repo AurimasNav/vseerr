@@ -14,12 +14,14 @@ import type {
   VersionFileSummary,
 } from '@server/lib/versionCoverage';
 import {
-  REQUEST_HOLD_MS,
+  canBeCovered,
   computeCoverage,
   languageOnlyFormat,
+  sanitizeCoverageMode,
   suggestDefiningFormats,
   summarizeFiles,
 } from '@server/lib/versionCoverage';
+import { getVersionRules } from '@server/lib/versions';
 import logger from '@server/logger';
 
 // VSeerr: reads each version's files from Radarr/Sonarr to show what they
@@ -277,7 +279,8 @@ export const getMediaVersions = async (
   if (servers.length < 2) {
     return { versions: [] };
   }
-  const recentSince = now.getTime() - REQUEST_HOLD_MS;
+  const holdMs = getVersionRules().holdHours * 60 * 60 * 1000;
+  const recentSince = now.getTime() - holdMs;
 
   const gathered = await Promise.all(
     servers.map(async (version) => {
@@ -286,6 +289,7 @@ export const getMediaVersions = async (
         label: version.label,
         definingFormats: version.server.definingFormats ?? [],
         definingMatch: version.server.definingMatch ?? 'all',
+        coverageMode: sanitizeCoverageMode(version.server.coverageMode),
         instanceFormats: [],
       };
       const requests = openRequests(media, version).filter(
@@ -392,7 +396,7 @@ export const getMediaVersions = async (
 
   const coverage = computeCoverage(
     gathered.map((g) => g.input),
-    { mediaType: type === 'radarr' ? 'movie' : 'tv', now }
+    { mediaType: type === 'radarr' ? 'movie' : 'tv', now, holdMs }
   );
 
   return {
@@ -433,7 +437,7 @@ export const coverageBlock = async ({
           !s.buttonLabel?.trim() &&
           (s.id === media.serviceId || s.isDefault)
       );
-  if (!target || !(target.definingFormats ?? []).length) {
+  if (!target || !canBeCovered(target)) {
     return undefined;
   }
 

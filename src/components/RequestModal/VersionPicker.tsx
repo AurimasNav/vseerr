@@ -27,7 +27,7 @@ const messages = defineMessages('components.RequestModal.VersionPicker', {
     'Another version already has this title, so this does not apply now.',
   coveredby: 'Already available through {version}.',
   requestedvia:
-    'Just requested in {version}, which may cover this version. It opens again within a day if it does not.',
+    'Just requested in {version}, which may cover this version. It opens again if that file does not.',
 });
 
 interface VersionPickerProps {

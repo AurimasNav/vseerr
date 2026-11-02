@@ -10,6 +10,7 @@ import type {
 import BaseScanner from '@server/lib/scanners/baseScanner';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { versionServerIds } from '@server/lib/versions';
 import { uniqWith } from 'lodash';
 
 type SyncStatus = StatusBase & {
@@ -35,6 +36,8 @@ class RadarrScanner
   private didScan4k = false;
   private serverReturnedEmpty = false;
   private server4kReturnedEmpty = false;
+  // VSeerr: servers holding a version; their titles are not the standard version's.
+  private versionIds: Set<number> = new Set();
 
   constructor() {
     super('Radarr Scan', { bundleSize: 50 });
@@ -75,6 +78,8 @@ class RadarrScanner
         );
       });
 
+      this.versionIds = versionServerIds(settings.radarr);
+
       for (const server of this.servers) {
         this.currentServer = server;
         if (server.syncEnabled) {
@@ -90,6 +95,22 @@ class RadarrScanner
 
           this.items = await this.radarrApi.getMovies();
           this.currentServerTmdbIds = new Set();
+
+          if (this.versionIds.has(server.id)) {
+            await this.loop(this.processVersionRadarrMovie.bind(this), {
+              sessionId,
+            });
+            for (const serviceId of this.getServiceIds(server.id)) {
+              await this.resetStaleServiceStatus({
+                serviceId,
+                serviceType: 'radarr',
+                mediaType: MediaType.MOVIE,
+                seenTmdbIds: this.currentServerTmdbIds,
+                serverName: server.name,
+              });
+            }
+            continue;
+          }
 
           const server4k = this.enable4kMovie && server.is4k;
           if (server4k) {
@@ -130,7 +151,9 @@ class RadarrScanner
       // media that exists on an unscanned server (e.g. separate instances for
       // anime, regional content, or different languages).
       const allStandardScanned = this.servers
-        .filter((s) => !this.enable4kMovie || !s.is4k)
+        .filter(
+          (s) => (!this.enable4kMovie || !s.is4k) && !this.versionIds.has(s.id)
+        )
         .every((s) => s.syncEnabled);
       const all4kScanned = this.servers
         .filter((s) => this.enable4kMovie && s.is4k)
@@ -159,6 +182,9 @@ class RadarrScanner
         return scanComplete && !processingIds.has(media.tmdbId);
       });
 
+      if (this.didScanStandard) {
+        await this.repairVersionOnlyTitles(MediaType.MOVIE);
+      }
       await this.cleanupOrphanedMovies();
       this.log('Radarr scan complete', 'info');
     } catch (e) {
@@ -204,13 +230,39 @@ class RadarrScanner
     }
   }
 
+  /** VSeerr: a version server's movie only sets that version's status. */
+  private async processVersionRadarrMovie(
+    radarrMovie: RadarrMovie
+  ): Promise<void> {
+    this.currentServerTmdbIds.add(radarrMovie.tmdbId);
+    try {
+      await this.processVersionMovie(radarrMovie.tmdbId, {
+        serviceId: this.currentServer.id,
+        externalServiceId: radarrMovie.id,
+        externalServiceSlug: radarrMovie.titleSlug,
+        imdbId: radarrMovie.imdbId,
+        title: radarrMovie.title,
+        processing: !radarrMovie.hasFile && radarrMovie.monitored,
+        hasFile: radarrMovie.hasFile,
+      });
+    } catch (e) {
+      this.log('Failed to process Radarr media', 'error', {
+        errorMessage: e.message,
+        title: radarrMovie.title,
+      });
+    }
+  }
+
   private async existsInAnyServer(
     tmdbId: number,
     is4k: boolean
   ): Promise<boolean> {
+    // A version server's copy is not the standard (or 4K) version's.
     const servers = this.servers.filter(
       (server) =>
-        server.syncEnabled && (this.enable4kMovie && server.is4k) === is4k
+        server.syncEnabled &&
+        (this.enable4kMovie && server.is4k) === is4k &&
+        !this.versionIds.has(server.id)
     );
 
     for (const server of servers) {
