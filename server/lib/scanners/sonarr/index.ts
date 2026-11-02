@@ -331,13 +331,21 @@ class SonarrScanner
     tvdbId: number,
     is4k: boolean
   ): Promise<boolean> {
-    // A version server's copy is not the standard (or 4K) version's.
-    const servers = this.servers.filter(
-      (server) =>
-        server.syncEnabled &&
-        (this.enable4kShow && server.is4k) === is4k &&
-        !this.versionIds.has(server.id)
-    );
+    // A version server's copy is not the standard (or 4K) version's, but a
+    // standard request for a title that a version server has is left alone:
+    // the title was most likely moved there and is still on its way. Version
+    // servers are checked last, so a standard server's answer wins.
+    const servers = this.servers
+      .filter(
+        (server) =>
+          server.syncEnabled &&
+          (this.enable4kShow && server.is4k) === is4k &&
+          (!is4k || !this.versionIds.has(server.id))
+      )
+      .sort(
+        (a, b) =>
+          Number(this.versionIds.has(a.id)) - Number(this.versionIds.has(b.id))
+      );
 
     for (const server of servers) {
       try {
@@ -348,6 +356,12 @@ class SonarrScanner
         const series = await api.getLibrarySeriesByTvdbId(tvdbId);
 
         if (series.some((show) => show.tvdbId === tvdbId)) {
+          if (this.versionIds.has(server.id)) {
+            this.log(
+              `Series ${tvdbId} has a standard request but is only in version server ${server.name}. Leaving the request as it is.`,
+              'warn'
+            );
+          }
           return true;
         }
       } catch (e) {

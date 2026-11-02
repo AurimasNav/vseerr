@@ -31,12 +31,14 @@ Object.defineProperty(RadarrAPI.prototype, 'getMovies', {
 });
 
 let getLibraryMoviesByTmdbIdImpl: (
-  tmdbId: number
+  tmdbId: number,
+  url: string
 ) => Promise<RadarrMovie[]> = async () => [];
 Object.defineProperty(RadarrAPI.prototype, 'getLibraryMoviesByTmdbId', {
   set() {},
   get() {
-    return async (tmdbId: number) => getLibraryMoviesByTmdbIdImpl(tmdbId);
+    const url: string = this.axios?.defaults?.baseURL ?? '';
+    return async (tmdbId: number) => getLibraryMoviesByTmdbIdImpl(tmdbId, url);
   },
   configurable: true,
 });
@@ -1312,6 +1314,47 @@ describe('Radarr Scanner', () => {
       assert.strictEqual(media.status, MediaStatus.AVAILABLE);
       assert.strictEqual(media.serviceId, STANDARD);
       assert.strictEqual(media.externalServiceId, 10);
+    });
+
+    it('keeps a standard request when its movie was moved to a version server', async () => {
+      const media = await getRepository(Media).save(
+        new Media({
+          tmdbId: 586,
+          mediaType: MediaType.MOVIE,
+          status: MediaStatus.PROCESSING,
+          serviceId: STANDARD,
+        })
+      );
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+      getSettings().radarr = [];
+      const request = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.MOVIE,
+          media,
+          requestedBy,
+          status: MediaRequestStatus.APPROVED,
+          is4k: false,
+        })
+      );
+      const looked: string[] = [];
+      getLibraryMoviesByTmdbIdImpl = async (tmdbId, url) => {
+        looked.push(url);
+        return url.includes('radarr-ru')
+          ? [fakeRadarrMovie({ tmdbId, id: 21 })]
+          : [];
+      };
+
+      await scanWithVersion(587, { hasFile: false, monitored: true });
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
+      assert.strictEqual((await mediaOf(586)).status, MediaStatus.PROCESSING);
+      // The standard server is asked first.
+      assert.ok(looked[0].includes('//radarr:'), looked.join(','));
     });
 
     it('treats every server as standard when all of them are versions', async () => {

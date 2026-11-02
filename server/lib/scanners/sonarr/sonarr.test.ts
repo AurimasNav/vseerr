@@ -35,12 +35,14 @@ Object.defineProperty(SonarrAPI.prototype, 'getSeries', {
 });
 
 let getLibrarySeriesByTvdbIdImpl: (
-  tvdbId: number
+  tvdbId: number,
+  url: string
 ) => Promise<SonarrSeries[]> = async () => [];
 Object.defineProperty(SonarrAPI.prototype, 'getLibrarySeriesByTvdbId', {
   set() {},
   get() {
-    return async (tvdbId: number) => getLibrarySeriesByTvdbIdImpl(tvdbId);
+    const url: string = this.axios?.defaults?.baseURL ?? '';
+    return async (tvdbId: number) => getLibrarySeriesByTvdbIdImpl(tvdbId, url);
   },
   configurable: true,
 });
@@ -1257,6 +1259,43 @@ describe('Sonarr Scanner', () => {
       });
       assert.strictEqual(row.status, MediaStatus.AVAILABLE);
       assert.deepStrictEqual(row.seasonStatuses, { 1: MediaStatus.AVAILABLE });
+    });
+
+    it('keeps a standard request when its show was moved to a version server', async () => {
+      const media = await getRepository(Media).save(
+        new Media({
+          tmdbId: 3,
+          tvdbId: 300,
+          mediaType: MediaType.TV,
+          status: MediaStatus.PROCESSING,
+          serviceId: STANDARD,
+          seasons: [
+            new Season({ seasonNumber: 1, status: MediaStatus.PROCESSING }),
+          ],
+        })
+      );
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+      getSettings().sonarr = [];
+      const request = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          media,
+          requestedBy,
+          status: MediaRequestStatus.APPROVED,
+          is4k: false,
+        })
+      );
+      getLibrarySeriesByTvdbIdImpl = async (tvdbId, url) =>
+        url.includes('sonarr-lt') ? [fakeSonarrSeries({ tvdbId, id: 30 })] : [];
+
+      await scanWithVersion();
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.APPROVED);
     });
 
     it('gives seasons that only the version has their standard status back', async () => {
