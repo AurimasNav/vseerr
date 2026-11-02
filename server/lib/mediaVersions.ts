@@ -5,6 +5,7 @@ import type Media from '@server/entity/Media';
 import type { DVRSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import type {
+  ArrFormatSpec,
   CoverageFile,
   CoverageKey,
   CoverageVersionInput,
@@ -15,6 +16,7 @@ import type {
 import {
   REQUEST_HOLD_MS,
   computeCoverage,
+  languageOnlyFormat,
   suggestDefiningFormats,
   summarizeFiles,
 } from '@server/lib/versionCoverage';
@@ -64,6 +66,7 @@ interface ArrItem {
 interface CustomFormat {
   id: number;
   name: string;
+  specifications?: ArrFormatSpec[];
 }
 
 type ArrProfile = QualityProfile & {
@@ -174,15 +177,43 @@ const toInputFile = (file: ArrFile) => ({
   languages: (file.languages ?? []).map((language) => language.name),
 });
 
-const positiveFormats = (
+/**
+ * What the file details show of a profile: the custom formats it rewards,
+ * except formats that only test an audio language (e.g. "German audio").
+ * Those repeat the language list, so their languages are marked instead.
+ */
+const displayOptions = (
   profile: ArrProfile | undefined,
-  formats: CustomFormat[]
-): string[] => {
-  const names = new Map(formats.map((f) => [f.id, f.name]));
-  return (profile?.formatItems ?? [])
-    .filter((item) => item.score > 0)
-    .map((item) => names.get(item.format) ?? item.name ?? '')
-    .filter(Boolean);
+  formats: CustomFormat[],
+  files: ArrFile[]
+): { positiveFormats: string[]; scoredLanguages: string[] } => {
+  const byId = new Map(formats.map((f) => [f.id, f]));
+  const positiveFormats: string[] = [];
+  const languageIds = new Set<number>();
+  for (const item of profile?.formatItems ?? []) {
+    if (item.score <= 0) {
+      continue;
+    }
+    const format = byId.get(item.format);
+    const languages = languageOnlyFormat(format?.specifications);
+    if (languages) {
+      languages.forEach((id) => languageIds.add(id));
+      continue;
+    }
+    const name = format?.name ?? item.name;
+    if (name) {
+      positiveFormats.push(name);
+    }
+  }
+  const scoredLanguages = new Set<string>();
+  for (const file of files) {
+    for (const language of file.languages ?? []) {
+      if (languageIds.has(language.id)) {
+        scoredLanguages.add(language.name);
+      }
+    }
+  }
+  return { positiveFormats, scoredLanguages: [...scoredLanguages] };
 };
 
 interface VersionServer {
@@ -288,7 +319,7 @@ export const getMediaVersions = async (
               (p) => p.id === movie.qualityProfileId
             );
             summary = summarizeFiles([toInputFile(file)], {
-              positiveFormats: positiveFormats(profile, formats),
+              ...displayOptions(profile, formats, [file]),
               originalLanguage: movie.originalLanguage?.name,
             });
           }
@@ -332,7 +363,7 @@ export const getMediaVersions = async (
               (p) => p.id === series.qualityProfileId
             );
             const options = {
-              positiveFormats: positiveFormats(profile, formats),
+              ...displayOptions(profile, formats, files),
               originalLanguage: series.originalLanguage?.name,
             };
             summary = summarizeFiles(files.map(toInputFile), options);

@@ -3,9 +3,10 @@ import { describe, it } from 'node:test';
 
 import type { CoverageVersionInput } from '@server/lib/versionCoverage';
 import {
+  REQUEST_HOLD_MS,
   computeCoverage,
   fileMatches,
-  REQUEST_HOLD_MS,
+  languageOnlyFormat,
   sanitizeDefiningFormats,
   sanitizeDefiningMatch,
   suggestDefiningFormats,
@@ -314,5 +315,70 @@ describe('summarizeFiles', () => {
         ],
       }
     );
+  });
+});
+
+describe('summarizeFiles, scored languages', () => {
+  it('marks languages the profile rewards', () => {
+    const summary = summarizeFiles(
+      [{ resolution: 1080, formats: [], languages: ['English', 'German'] }],
+      {
+        positiveFormats: [],
+        originalLanguage: 'English',
+        scoredLanguages: ['German'],
+      }
+    );
+    assert.deepStrictEqual(summary.languages, [
+      { name: 'English', files: 1, original: true },
+      { name: 'German', files: 1, original: false, scored: true },
+    ]);
+  });
+});
+
+describe('languageOnlyFormat', () => {
+  const language = (value: number, over: Record<string, unknown> = {}) => ({
+    implementation: 'LanguageSpecification',
+    negate: false,
+    fields: [
+      { name: 'value', value },
+      { name: 'exceptLanguage', value: false },
+    ],
+    ...over,
+  });
+
+  it('returns the languages of a format that only tests audio languages', () => {
+    assert.deepStrictEqual(languageOnlyFormat([language(4)]), [4]);
+    assert.deepStrictEqual(
+      languageOnlyFormat([language(4), language(24)]),
+      [4, 24]
+    );
+  });
+
+  it('ignores formats that test anything else', () => {
+    assert.strictEqual(
+      languageOnlyFormat([
+        language(1),
+        { implementation: 'ReleaseTitleSpecification', fields: [] },
+      ]),
+      undefined
+    );
+    assert.strictEqual(
+      languageOnlyFormat([language(1, { negate: true })]),
+      undefined
+    );
+    assert.strictEqual(
+      languageOnlyFormat([
+        language(1, {
+          fields: [
+            { name: 'value', value: 1 },
+            { name: 'exceptLanguage', value: true },
+          ],
+        }),
+      ]),
+      undefined
+    );
+    assert.strictEqual(languageOnlyFormat([language(-2)]), undefined);
+    assert.strictEqual(languageOnlyFormat([]), undefined);
+    assert.strictEqual(languageOnlyFormat(undefined), undefined);
   });
 });

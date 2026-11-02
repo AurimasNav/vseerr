@@ -35,9 +35,53 @@ export interface VersionFileSummary {
   resolutions: string[];
   /** Custom formats that score above zero in the item's profile. */
   formats: { name: string; files: number }[];
-  /** Audio languages; `original` marks the title's original language. */
-  languages: { name: string; files: number; original: boolean }[];
+  /**
+   * Audio languages; `original` marks the title's original language and
+   * `scored` a language the profile rewards (e.g. through a "German audio"
+   * format, which is then not listed under `formats`).
+   */
+  languages: {
+    name: string;
+    files: number;
+    original: boolean;
+    scored?: boolean;
+  }[];
 }
+
+/** The parts of an arr custom format that tell what it tests. */
+export interface ArrFormatSpec {
+  implementation?: string;
+  negate?: boolean;
+  fields?: { name: string; value?: unknown }[];
+}
+
+/**
+ * Language ids a custom format tests when it tests nothing but audio
+ * languages (e.g. "German audio"), else undefined. Such a format repeats
+ * the file's language list, so the details show the language instead.
+ */
+export const languageOnlyFormat = (
+  specifications: ArrFormatSpec[] | undefined
+): number[] | undefined => {
+  if (!specifications || specifications.length === 0) {
+    return undefined;
+  }
+  const ids: number[] = [];
+  for (const spec of specifications) {
+    if (spec.implementation !== 'LanguageSpecification' || spec.negate) {
+      return undefined;
+    }
+    const field = (name: string) =>
+      spec.fields?.find((f) => f.name === name)?.value;
+    const id = field('value');
+    // Negative ids are "Any" and "Original"; "except" inverts the test.
+    if (typeof id !== 'number' || id < 0 || field('exceptLanguage') === true) {
+      return undefined;
+    }
+    ids.push(id);
+  }
+  return ids;
+};
 
 /** Matched custom formats of one file. */
 export interface CoverageFile {
@@ -289,9 +333,16 @@ export const summarizeFiles = (
   {
     positiveFormats,
     originalLanguage,
-  }: { positiveFormats: string[]; originalLanguage?: string }
+    scoredLanguages = [],
+  }: {
+    positiveFormats: string[];
+    originalLanguage?: string;
+    /** Languages the profile rewards; marked, not repeated as formats. */
+    scoredLanguages?: string[];
+  }
 ): VersionFileSummary => {
   const positive = new Set(positiveFormats.map(normalize));
+  const scored = new Set(scoredLanguages.map(normalize));
   const formatCounts = new Map<string, number>();
   const languageCounts = new Map<string, number>();
   const resolutions = new Set<number>();
@@ -325,6 +376,7 @@ export const summarizeFiles = (
         name,
         files: count,
         original: normalize(name) === original,
+        ...(scored.has(normalize(name)) ? { scored: true } : {}),
       }))
       .sort(
         (a, b) =>

@@ -91,7 +91,7 @@ const SummaryChecks = ({ summary }: { summary: VersionFileSummary }) => {
           }
           files={language.files}
           total={summary.files}
-          muted
+          muted={!language.scored}
         />
       ))}
     </div>
