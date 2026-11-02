@@ -34,6 +34,16 @@ Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob
 - `main` is VSeerr: the latest Seerr release plus VSeerr's changes. Open pull requests against `main`.
 - Seerr releases are merged into `main` as they come out. A scheduled workflow checks each new release and opens an issue with the result.
 
+## Pull request titles and versions
+
+Pull requests are squash-merged, so the title becomes the commit message on `main`. Write it as a [conventional commit](https://www.conventionalcommits.org/): the title type sets how much VSeerr's version goes up when the pull request is merged.
+
+- `feat: ...` raises the minor version: 2.118.2 becomes 2.119.0.
+- `fix: ...`, `chore: ...` or any other title raises the patch version: 2.118.2 becomes 2.118.3.
+- `feat!: ...` (any type with `!`), or a `BREAKING CHANGE:` line in the description, raises the major version: 2.118.2 becomes 3.0.0. Use it when a change needs action from people who run VSeerr.
+
+Images are tagged `<Seerr version>-vseerr.<VSeerr version>`, for example `3.5.1-vseerr.2.118.0`. VSeerr's version counts every commit on `main`, Seerr's included, so merging a Seerr release changes the first part and also raises the second by that release's own commits.
+
 ## Development
 
 You need [Node.js](https://nodejs.org/en/download/) 22, [pnpm](https://pnpm.io/installation) and [Git](https://git-scm.com/downloads).

@@ -6,8 +6,10 @@
 # only run on Seerr's branches, so VSeerr publishes its image here.
 #
 # Tags:
-#   <X.Y.Z>-vseerr.<N>  each build of main: the Seerr release it is based on
-#                       plus a VSeerr build number (see GitVersion.yml)
+#   <Seerr version>-vseerr.<VSeerr version>
+#                       each build of main, e.g. 3.5.1-vseerr.2.118.0: the Seerr
+#                       release it is based on (package.json) plus VSeerr's
+#                       own MAJOR.MINOR.PATCH (GitVersion.yml)
 #   main                latest build of main
 #   sha-<short sha>     one per commit, never moved
 #
@@ -37,20 +39,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  image:
-    name: Image
+  # A job of its own, with read-only access: GitVersion is a downloaded binary
+  # and never runs where the token can publish packages.
+  version:
+    name: Version
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     permissions:
       contents: read
-      packages: write
-    env:
-      PUBLISH: ${{ github.event_name != 'pull_request' }}
+    outputs:
+      semver: ${{ steps.version.outputs.semver }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # GitVersion counts commits since the Seerr release.
+          # GitVersion reads the whole history of main.
           fetch-depth: 0
           persist-credentials: false
 
@@ -59,19 +62,43 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          MAIN: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          # Seerr's release tags are the version base (GitVersion.yml).
-          git fetch --quiet --no-tags https://github.com/seerr-team/seerr.git '+refs/tags/v*:refs/tags/v*'
           $archive = "gitversion-linux-x64-$env:GITVERSION_VERSION.tar.gz"
           gh release download $env:GITVERSION_VERSION --repo GitTools/GitVersion --pattern $archive --dir $env:RUNNER_TEMP
           # Only run a GitVersion binary built by GitVersion's own release workflow.
           gh attestation verify (Join-Path $env:RUNNER_TEMP $archive) --repo GitTools/GitVersion
           tar -xzf (Join-Path $env:RUNNER_TEMP $archive) -C $env:RUNNER_TEMP
-          $version = (& (Join-Path $env:RUNNER_TEMP gitversion) /output json | ConvertFrom-Json).SemVer
-          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Unexpected version '$version'" }
+          $vseerr = (& (Join-Path $env:RUNNER_TEMP gitversion) /output json | ConvertFrom-Json).SemVer
+          # The Seerr release VSeerr is based on.
+          $seerr = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($seerr -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected Seerr version '$seerr'" }
+          # Pull requests get a pre-release label (2.118.0-PullRequest25.1); join it with dots.
+          $version = "$seerr-vseerr.$($vseerr -replace '-', '.')"
+          # Published tags are exactly <Seerr version>-vseerr.<MAJOR.MINOR.PATCH>,
+          # the form deployments follow.
+          $pattern = $env:MAIN -eq 'true' ? '^\d+\.\d+\.\d+-vseerr\.\d+\.\d+\.\d+$' : '^\d+\.\d+\.\d+-vseerr\.\d+\.\d+\.\d+(\.[0-9A-Za-z]+)*$'
+          if ($version -notmatch $pattern) { throw "Unexpected version '$version'" }
           "semver=$version" >> $env:GITHUB_OUTPUT
           "Version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
+
+  image:
+    name: Image
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
+      VERSION: ${{ needs.version.outputs.semver }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Image name and commit time
         id: vars
@@ -97,11 +124,11 @@ jobs:
         with:
           images: ${{ steps.vars.outputs.image }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.semver }},enable={{is_default_branch}}
+            type=raw,value=${{ env.VERSION }},enable={{is_default_branch}}
             type=raw,value=main,enable={{is_default_branch}}
             type=sha,format=short
           labels: |
-            org.opencontainers.image.version=${{ steps.version.outputs.semver }}
+            org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.title=VSeerr
             org.opencontainers.image.description=Seerr with versions: request the same title from several Radarr/Sonarr instances
 

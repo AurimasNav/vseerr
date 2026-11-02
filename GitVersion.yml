@@ -1,13 +1,22 @@
-# Image version = the Seerr release VSeerr is based on + a VSeerr build number,
-# e.g. 3.5.1-vseerr.14: Seerr v3.5.1 plus 14 VSeerr commits on top of it.
-# The base comes from Seerr's release tags (vX.Y.Z), which the image workflow
-# fetches before running GitVersion. Merging a newer Seerr release moves the
-# base to that release; the build number keeps counting from the old one
-# (e.g. 3.5.2-vseerr.15), so it always goes up.
-workflow: GitHubFlow/v1
-tag-prefix: '[vV]?'
+# VSeerr's own version, MAJOR.MINOR.PATCH. The image tag puts it after the
+# Seerr release VSeerr is based on: <Seerr version>-vseerr.<VSeerr version>,
+# for example 3.5.1-vseerr.12.4.2. The image workflow reads the Seerr version
+# from package.json; GitVersion works out only the part after "vseerr.".
+#
+# GitVersion reads the whole history of main, Seerr's commits included, and
+# raises the version once per commit by its conventional-commit title:
+#   feat: ...                                   minor  12.4.2 -> 12.5.0
+#   fix:, chore: or any other title             patch  12.4.2 -> 12.4.3
+#   feat!: ... or a "BREAKING CHANGE:" line     major  12.4.2 -> 13.0.0
+# Pull requests are squash-merged, so each one is a single commit with its
+# title. A merged Seerr release raises it by each of its own commits.
+# No git tags are used or needed.
+workflow: TrunkBased/preview1
+# Matches no tag: Seerr's v* release tags are not VSeerr versions.
+tag-prefix: 'vseerr-v'
+major-version-bump-message: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]*\))?!:|\nBREAKING[ -]CHANGE:\s'
+minor-version-bump-message: '^feat(\([^)]*\))?:'
+patch-version-bump-message: '^(build|chore|ci|docs|fix|perf|refactor|revert|style|test)(\([^)]*\))?:'
 branches:
   main:
-    mode: ContinuousDelivery
-    label: vseerr
-    increment: None
+    increment: Patch
