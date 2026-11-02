@@ -23,7 +23,7 @@ import {
 } from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
-import { isVersionDestination } from '@server/lib/versions';
+import { getVersionRules, isVersionDestination } from '@server/lib/versions';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -298,11 +298,13 @@ export class MediaRequest {
       }
     }
 
-    // VSeerr: one version of each title per user, except for request managers.
+    // VSeerr: one version of each title per user, except for request managers
+    // (Settings → Users can turn this off).
     if (
       media.id &&
       !requestBody.is4k &&
       !user.hasPermission(Permission.MANAGE_REQUESTS) &&
+      getVersionRules().oneVersionPerTitle &&
       (await holdsOtherVersion(requestRepository, {
         mediaId: media.id,
         userId: requestUser.id,
@@ -317,7 +319,7 @@ export class MediaRequest {
     }
 
     // VSeerr: a version another version's file covers (or may cover, while
-    // that request is under a day old) is for request managers only.
+    // that request is younger than the hold time) is for request managers only.
     // Covered seasons of a show are dropped from the request, the same way
     // Seerr drops seasons that are already requested.
     let coveredSeasons: number[] = [];

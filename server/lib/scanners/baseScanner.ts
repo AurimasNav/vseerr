@@ -12,6 +12,7 @@ import Season from '@server/entity/Season';
 import { upsertMediaServiceStatus } from '@server/lib/mediaServiceStatus';
 import type { DVRSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { versionServerIds } from '@server/lib/versions';
 import logger from '@server/logger';
 import AsyncLock from '@server/utils/asyncLock';
 import { randomUUID } from 'crypto';
@@ -134,6 +135,11 @@ class BaseScanner<T> {
         const statusField = is4k ? 'status4k' : 'status';
         const previousStatus = existing[statusField];
         const abandonedEntry = !processing && !hasFile;
+        // VSeerr: a media server file of a movie only versions have is theirs.
+        const versionOnly =
+          serviceId === undefined &&
+          !is4k &&
+          (await this.versionOnlyParts(existing.id, MediaType.MOVIE)).title;
         // One server cannot speak for the others; settled after the whole run.
         const deferredReset =
           this.declineRequestsOnStatusReset &&
@@ -144,7 +150,11 @@ class BaseScanner<T> {
           this.recordStatusReset(existing.id, is4k);
         }
 
-        if (previousStatus !== MediaStatus.AVAILABLE && !deferredReset) {
+        if (
+          previousStatus !== MediaStatus.AVAILABLE &&
+          !deferredReset &&
+          !versionOnly
+        ) {
           existing[statusField] =
             !processing && hasFile
               ? MediaStatus.AVAILABLE
@@ -331,6 +341,11 @@ class BaseScanner<T> {
 
     await this.asyncLock.dispatch(tmdbId, async () => {
       const media = await this.getExisting(tmdbId, MediaType.TV);
+      // VSeerr: a media server's episodes of seasons only versions have are theirs.
+      const versionOnlySeasons =
+        media && serviceId === undefined
+          ? (await this.versionOnlyParts(media.id, MediaType.TV)).seasons
+          : new Set<number>();
 
       const newSeasons: Season[] = [];
 
@@ -351,15 +366,22 @@ class BaseScanner<T> {
         // Zeroing the counts leaves any existing status for availabilitySync to judge.
         const season =
           rawSeason.totalEpisodes > 0
-            ? rawSeason
+            ? versionOnlySeasons.has(rawSeason.seasonNumber)
+              ? { ...rawSeason, episodes: 0 }
+              : rawSeason
             : { ...rawSeason, episodes: 0, episodes4k: 0 };
+        // The library still links to the show when only a version has it.
+        const inLibrary =
+          season.episodes > 0 ||
+          (versionOnlySeasons.has(rawSeason.seasonNumber) &&
+            rawSeason.episodes > 0);
 
         const existingSeason = media?.seasons.find(
           (es) => es.seasonNumber === season.seasonNumber
         );
 
         // We update the rating keys and jellyfinMediaId in the seasons loop because we need episode counts
-        if (media && season.episodes > 0 && media.ratingKey !== ratingKey) {
+        if (media && inLibrary && media.ratingKey !== ratingKey) {
           media.ratingKey = ratingKey;
         }
 
@@ -372,11 +394,7 @@ class BaseScanner<T> {
           media.ratingKey4k = ratingKey;
         }
 
-        if (
-          media &&
-          season.episodes > 0 &&
-          media.jellyfinMediaId !== jellyfinMediaId
-        ) {
+        if (media && inLibrary && media.jellyfinMediaId !== jellyfinMediaId) {
           media.jellyfinMediaId = jellyfinMediaId;
         }
 
@@ -756,9 +774,12 @@ class BaseScanner<T> {
 
     const requestRepository = getRepository(MediaRequest);
 
+    // Version requests follow their own server (see resetStaleServiceStatus).
     const orphanedRequests = (media.requests ?? []).filter(
       (request) =>
-        request.is4k === is4k && request.status === MediaRequestStatus.APPROVED
+        request.is4k === is4k &&
+        !request.isServiceRequest &&
+        request.status === MediaRequestStatus.APPROVED
     );
 
     for (const request of orphanedRequests) {
@@ -1188,6 +1209,363 @@ class BaseScanner<T> {
         );
       }
     }
+  }
+
+  /**
+   * VSeerr: the servers of this media type, split into the standard ones
+   * (non-4K, no version name) and versions. Empty when no versions are set
+   * up, or when every server is a version (Seerr's behaviour then).
+   */
+  private versionSplit(mediaType: MediaType): {
+    serviceType: 'radarr' | 'sonarr';
+    versionIds: Set<number>;
+    standardIds: number[];
+    standardSynced: boolean;
+  } {
+    const settings = getSettings();
+    const servers =
+      mediaType === MediaType.MOVIE ? settings.radarr : settings.sonarr;
+    const versionIds = versionServerIds(servers);
+    const standard = servers.filter(
+      (server) => !server.is4k && !versionIds.has(server.id)
+    );
+    return {
+      serviceType: mediaType === MediaType.MOVIE ? 'radarr' : 'sonarr',
+      versionIds,
+      standardIds: standard.map((server) => server.id),
+      standardSynced: standard.every((server) => server.syncEnabled),
+    };
+  }
+
+  /**
+   * VSeerr: what of a title only versions have files of, judged from the
+   * statuses the Radarr/Sonarr scans record: the movie, or seasons of a
+   * show. Plex and Jellyfin scans leave these out of the standard status,
+   * because a shared library cannot tell whose file it has. Nothing when
+   * versions are not set up or a standard server is not synced.
+   */
+  protected async versionOnlyParts(
+    mediaId: number,
+    mediaType: MediaType
+  ): Promise<{ title: boolean; seasons: Set<number> }> {
+    const split = this.versionSplit(mediaType);
+    const none = { title: false, seasons: new Set<number>() };
+    if (split.versionIds.size === 0 || !split.standardSynced) {
+      return none;
+    }
+    const rows = await getRepository(MediaServiceStatus).find({
+      where: { mediaId, serviceType: split.serviceType },
+    });
+    const standardRows = rows.filter((row) =>
+      split.standardIds.includes(row.serviceId)
+    );
+    const versionRows = rows.filter((row) =>
+      split.versionIds.has(row.serviceId)
+    );
+    const hasFiles = (status: MediaStatus | undefined) =>
+      status === MediaStatus.AVAILABLE ||
+      status === MediaStatus.PARTIALLY_AVAILABLE;
+
+    if (mediaType === MediaType.MOVIE) {
+      return {
+        title:
+          versionRows.some((row) => hasFiles(row.status)) &&
+          !standardRows.some((row) => hasFiles(row.status)),
+        seasons: new Set(),
+      };
+    }
+    const seasons = new Set<number>();
+    for (const row of versionRows) {
+      for (const [season, status] of Object.entries(row.seasonStatuses ?? {})) {
+        const n = Number(season);
+        if (
+          hasFiles(status) &&
+          !standardRows.some((s) => hasFiles(s.seasonStatuses?.[n]))
+        ) {
+          seasons.add(n);
+        }
+      }
+    }
+    return { title: false, seasons };
+  }
+
+  /**
+   * VSeerr: records a version server's movie. Only the version's own status
+   * changes; the standard status and the standard server fields stay as the
+   * standard servers left them.
+   */
+  protected async processVersionMovie(
+    tmdbId: number,
+    {
+      serviceId,
+      externalServiceId,
+      externalServiceSlug,
+      imdbId,
+      title = 'Unknown Title',
+      processing = false,
+      hasFile = true,
+    }: ProcessOptions & { serviceId: number }
+  ): Promise<void> {
+    await this.asyncLock.dispatch(tmdbId, async () => {
+      const media = await this.versionMedia(tmdbId, MediaType.MOVIE, {
+        imdbId,
+        create: processing || hasFile,
+      });
+      if (!media) {
+        return;
+      }
+      await this.upsertServiceStatus(
+        media.id,
+        serviceId,
+        'radarr',
+        hasFile
+          ? MediaStatus.AVAILABLE
+          : processing
+            ? MediaStatus.PROCESSING
+            : MediaStatus.UNKNOWN,
+        externalServiceId,
+        externalServiceSlug
+      );
+      this.log(`Recorded version status of ${title}`, 'debug');
+    });
+  }
+
+  /** VSeerr: the show counterpart of processVersionMovie. */
+  protected async processVersionShow(
+    tmdbId: number,
+    tvdbId: number | undefined,
+    seasons: ProcessableSeason[],
+    {
+      serviceId,
+      externalServiceId,
+      externalServiceSlug,
+      title = 'Unknown Title',
+    }: ProcessOptions & { serviceId: number }
+  ): Promise<void> {
+    await this.asyncLock.dispatch(tmdbId, async () => {
+      const { overall, perSeason } = this.computeSeasonServiceStatuses(
+        seasons,
+        false
+      );
+      const media = await this.versionMedia(tmdbId, MediaType.TV, {
+        tvdbId,
+        create: overall !== MediaStatus.UNKNOWN,
+      });
+      if (!media) {
+        return;
+      }
+      await this.upsertServiceStatus(
+        media.id,
+        serviceId,
+        'sonarr',
+        overall,
+        externalServiceId,
+        externalServiceSlug,
+        perSeason
+      );
+      this.log(`Recorded version status of ${title}`, 'debug');
+    });
+  }
+
+  /** The title's media row; a new one starts with no standard status. */
+  private async versionMedia(
+    tmdbId: number,
+    mediaType: MediaType,
+    {
+      imdbId,
+      tvdbId,
+      create,
+    }: { imdbId?: string; tvdbId?: number; create: boolean }
+  ): Promise<Media | null> {
+    const mediaRepository = getRepository(Media);
+    const existing = await this.getExisting(tmdbId, mediaType);
+    if (existing) {
+      if ((imdbId && !existing.imdbId) || (tvdbId && !existing.tvdbId)) {
+        existing.imdbId = existing.imdbId ?? imdbId;
+        existing.tvdbId = existing.tvdbId ?? tvdbId;
+        await mediaRepository.save(existing);
+      }
+      return existing;
+    }
+    if (!create) {
+      return null;
+    }
+    return mediaRepository.save(
+      new Media({
+        tmdbId,
+        tvdbId,
+        imdbId,
+        mediaType,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+  }
+
+  /**
+   * VSeerr: titles only versions have get the standard status the standard
+   * servers give them. Older builds, and Plex or Jellyfin scans of a shared
+   * library, marked them available or processing in the standard version,
+   * which locked it and pointed its *arr links at the version's server.
+   * Runs after a complete scan of the standard servers.
+   */
+  protected async repairVersionOnlyTitles(mediaType: MediaType): Promise<void> {
+    const split = this.versionSplit(mediaType);
+    if (split.versionIds.size === 0 || !split.standardSynced) {
+      return;
+    }
+    const versionIds = [...split.versionIds];
+    const statusRepository = getRepository(MediaServiceStatus);
+    const mediaRepository = getRepository(Media);
+
+    const fromRows = await statusRepository.find({
+      select: { mediaId: true },
+      where: { serviceType: split.serviceType, serviceId: In(versionIds) },
+    });
+    const fromServiceId = await mediaRepository.find({
+      select: { id: true },
+      where: { mediaType, serviceId: In(versionIds) },
+    });
+    const mediaIds = [
+      ...new Set([
+        ...fromRows.map((row) => row.mediaId),
+        ...fromServiceId.map((media) => media.id),
+      ]),
+    ];
+
+    const live = (status: MediaStatus | undefined) =>
+      status === MediaStatus.AVAILABLE ||
+      status === MediaStatus.PARTIALLY_AVAILABLE ||
+      status === MediaStatus.PROCESSING;
+    let repaired = 0;
+
+    for (let i = 0; i < mediaIds.length; i += 200) {
+      const chunk = mediaIds.slice(i, i + 200);
+      const [medias, rows] = await Promise.all([
+        mediaRepository.find({
+          where: { id: In(chunk), mediaType },
+          relations: { requests: true },
+        }),
+        statusRepository.find({
+          where: { mediaId: In(chunk), serviceType: split.serviceType },
+        }),
+      ]);
+
+      for (const media of medias) {
+        const own = rows.filter((row) => row.mediaId === media.id);
+        const standardRows = own.filter((row) =>
+          split.standardIds.includes(row.serviceId)
+        );
+        const versionRows = own.filter((row) =>
+          split.versionIds.has(row.serviceId)
+        );
+        const fromVersion =
+          media.serviceId != null && split.versionIds.has(media.serviceId);
+        const openStandard = (media.requests ?? []).filter(
+          (request) =>
+            !request.is4k &&
+            !request.isServiceRequest &&
+            (request.status === MediaRequestStatus.PENDING ||
+              request.status === MediaRequestStatus.APPROVED)
+        );
+        const requestedStatus = (
+          requests: MediaRequest[]
+        ): MediaStatus | undefined =>
+          requests.some((r) => r.status === MediaRequestStatus.APPROVED)
+            ? MediaStatus.PROCESSING
+            : requests.length > 0
+              ? MediaStatus.PENDING
+              : undefined;
+        let changed = false;
+
+        if (mediaType === MediaType.MOVIE) {
+          if (
+            live(media.status) &&
+            !standardRows.some((row) => live(row.status)) &&
+            (fromVersion || versionRows.some((row) => live(row.status)))
+          ) {
+            media.status = requestedStatus(openStandard) ?? MediaStatus.UNKNOWN;
+            changed = true;
+          }
+        } else {
+          for (const season of media.seasons ?? []) {
+            const n = season.seasonNumber;
+            if (
+              !live(season.status) ||
+              standardRows.some((row) => live(row.seasonStatuses?.[n])) ||
+              !(
+                fromVersion ||
+                versionRows.some((row) => live(row.seasonStatuses?.[n]))
+              )
+            ) {
+              continue;
+            }
+            season.status =
+              requestedStatus(
+                openStandard.filter((request) =>
+                  (request.seasons ?? []).some((s) => s.seasonNumber === n)
+                )
+              ) ?? MediaStatus.UNKNOWN;
+            changed = true;
+          }
+          if (changed) {
+            media.status = this.rollUpSeasons(media);
+          }
+        }
+
+        if (fromVersion) {
+          const standard = standardRows.find(
+            (row) =>
+              row.status !== MediaStatus.UNKNOWN &&
+              row.status !== MediaStatus.DELETED
+          );
+          media.serviceId = standard?.serviceId ?? null;
+          media.externalServiceId = standard?.externalServiceId ?? null;
+          media.externalServiceSlug = standard?.externalServiceSlug ?? null;
+          changed = true;
+        }
+
+        if (changed) {
+          // Saving the requests again could cascade stale copies.
+          const { requests, ...rest } = media;
+          void requests;
+          await mediaRepository.save(Object.assign(new Media(), rest));
+          repaired++;
+        }
+      }
+    }
+
+    if (repaired > 0) {
+      this.log(
+        `Gave ${repaired} title(s) that only versions have their standard status back`,
+        'info'
+      );
+    }
+  }
+
+  /** The standard status of a show from its seasons (specials aside). */
+  private rollUpSeasons(media: Media): MediaStatus {
+    const seasons = (media.seasons ?? []).filter((s) => s.seasonNumber !== 0);
+    const has = (status: MediaStatus) =>
+      seasons.some((season) => season.status === status);
+    if (
+      seasons.length > 0 &&
+      seasons.every((season) => season.status === MediaStatus.AVAILABLE)
+    ) {
+      return MediaStatus.AVAILABLE;
+    }
+    if (has(MediaStatus.AVAILABLE) || has(MediaStatus.PARTIALLY_AVAILABLE)) {
+      return MediaStatus.PARTIALLY_AVAILABLE;
+    }
+    if (has(MediaStatus.PROCESSING)) {
+      return MediaStatus.PROCESSING;
+    }
+    if (has(MediaStatus.PENDING) || media.status === MediaStatus.PENDING) {
+      return MediaStatus.PENDING;
+    }
+    return media.status === MediaStatus.DELETED
+      ? MediaStatus.DELETED
+      : MediaStatus.UNKNOWN;
   }
 
   get protectedUpdateRate(): number {

@@ -19,6 +19,7 @@ import type {
 import BaseScanner from '@server/lib/scanners/baseScanner';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
+import { versionServerIds } from '@server/lib/versions';
 import { uniqWith } from 'lodash';
 
 type SyncStatus = StatusBase & {
@@ -44,6 +45,8 @@ class SonarrScanner
   private didScan4k = false;
   private serverReturnedEmpty = false;
   private server4kReturnedEmpty = false;
+  // VSeerr: servers holding a version; their titles are not the standard version's.
+  private versionIds: Set<number> = new Set();
 
   constructor() {
     super('Sonarr Scan', { bundleSize: 50 });
@@ -84,6 +87,8 @@ class SonarrScanner
         );
       });
 
+      this.versionIds = versionServerIds(settings.sonarr);
+
       for (const server of this.servers) {
         this.currentServer = server;
         if (server.syncEnabled) {
@@ -99,6 +104,23 @@ class SonarrScanner
 
           this.items = await this.sonarrApi.getSeries();
           this.currentServerTmdbIds = new Set();
+
+          if (this.versionIds.has(server.id)) {
+            await this.loop(this.processSonarrSeries.bind(this), {
+              sessionId,
+            });
+            for (const serviceId of this.getServiceIds(server.id)) {
+              await this.resetStaleServiceStatus({
+                serviceId,
+                serviceType: 'sonarr',
+                mediaType: MediaType.TV,
+                seenTmdbIds: this.currentServerTmdbIds,
+                serverName: server.name,
+                clearSeasonStatuses: true,
+              });
+            }
+            continue;
+          }
 
           const server4k = this.enable4kShow && server.is4k;
           if (server4k) {
@@ -140,7 +162,9 @@ class SonarrScanner
       // media that exists on an unscanned server (e.g. separate instances for
       // anime, regional content, or different languages).
       const allStandardScanned = this.servers
-        .filter((s) => !this.enable4kShow || !s.is4k)
+        .filter(
+          (s) => (!this.enable4kShow || !s.is4k) && !this.versionIds.has(s.id)
+        )
         .every((s) => s.syncEnabled);
       const all4kScanned = this.servers
         .filter((s) => this.enable4kShow && s.is4k)
@@ -169,6 +193,9 @@ class SonarrScanner
         return scanComplete && !processingIds.has(media.tmdbId);
       });
 
+      if (this.didScanStandard) {
+        await this.repairVersionOnlyTitles(MediaType.TV);
+      }
       await this.cleanupOrphanedShows();
       this.log('Sonarr scan complete', 'info');
     } catch (e) {
@@ -179,8 +206,11 @@ class SonarrScanner
   }
 
   private async processSonarrSeries(sonarrSeries: SonarrSeries) {
+    const isVersion = this.versionIds.has(this.currentServer.id);
     const server4k = this.enable4kShow && this.currentServer.is4k;
-    if (server4k) {
+    if (isVersion) {
+      // Tracked through the version's own status only.
+    } else if (server4k) {
       this.scanned4kTvdbIds.add(sonarrSeries.tvdbId);
     } else {
       this.scannedTvdbIds.add(sonarrSeries.tvdbId);
@@ -258,6 +288,22 @@ class SonarrScanner
         });
       }
 
+      if (isVersion) {
+        // VSeerr: a version server's show only sets that version's status.
+        await this.processVersionShow(
+          tmdbId,
+          sonarrSeries.tvdbId,
+          processableSeasons,
+          {
+            serviceId: this.currentServer.id,
+            externalServiceId: sonarrSeries.id,
+            externalServiceSlug: sonarrSeries.titleSlug,
+            title: sonarrSeries.title,
+          }
+        );
+        return;
+      }
+
       if (processableSeasons.some((season) => season.processing)) {
         if (server4k) {
           this.processing4kTmdbIds.add(tmdbId);
@@ -285,9 +331,12 @@ class SonarrScanner
     tvdbId: number,
     is4k: boolean
   ): Promise<boolean> {
+    // A version server's copy is not the standard (or 4K) version's.
     const servers = this.servers.filter(
       (server) =>
-        server.syncEnabled && (this.enable4kShow && server.is4k) === is4k
+        server.syncEnabled &&
+        (this.enable4kShow && server.is4k) === is4k &&
+        !this.versionIds.has(server.id)
     );
 
     for (const server of servers) {

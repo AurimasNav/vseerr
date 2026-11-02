@@ -5,6 +5,7 @@ import { removeRequestServiceGrants } from '@server/lib/requestServices';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
+  sanitizeCoverageMode,
   sanitizeDefiningFormats,
   sanitizeDefiningMatch,
 } from '@server/lib/versionCoverage';
@@ -28,6 +29,7 @@ radarrRoutes.post('/', async (req, res) => {
     newRadarr.definingFormats
   );
   newRadarr.definingMatch = sanitizeDefiningMatch(newRadarr.definingMatch);
+  newRadarr.coverageMode = sanitizeCoverageMode(newRadarr.coverageMode);
   const lastItem = settings.radarr[settings.radarr.length - 1];
   newRadarr.id = lastItem ? lastItem.id + 1 : 0;
 
@@ -123,6 +125,7 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
       requestOptions: sanitizeRequestOptions(req.body.requestOptions),
       definingFormats: sanitizeDefiningFormats(req.body.definingFormats),
       definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
+      coverageMode: sanitizeCoverageMode(req.body.coverageMode),
     } as RadarrSettings;
     await settings.save();
 

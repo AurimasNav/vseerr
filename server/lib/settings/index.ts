@@ -92,6 +92,8 @@ export interface DVRSettings {
   definingFormats?: string[];
   /** VSeerr: whether a file needs all defining formats or any one. */
   definingMatch?: 'all' | 'any';
+  /** VSeerr: what lets another version cover this one (default `formats`). */
+  coverageMode?: 'formats' | 'anyFile' | 'never';
 }
 
 /**
@@ -165,6 +167,10 @@ export interface MainSettings {
   defaultPermissions: number;
   // Versions (`radarr:<id>` / `sonarr:<id>`) new users can request.
   defaultRequestServices?: string[];
+  // VSeerr: hours a fresh request in one version holds back the others (0 = off).
+  versionHoldHours?: number;
+  // VSeerr: users without Manage Requests request one version of each title.
+  oneVersionPerTitle?: boolean;
   defaultQuotas: {
     movie: Quota;
     tv: Quota;
@@ -249,6 +255,8 @@ interface FullPublicSettings extends PublicSettings {
   youtubeUrl: string;
   versionCheck: boolean;
   plexClientIdentifier: string;
+  /** VSeerr: users without Manage Requests request one version of each title. */
+  oneVersionPerTitle: boolean;
 }
 
 export interface NotificationAgentConfig {
@@ -776,6 +784,7 @@ class Settings {
       youtubeUrl: this.data.main.youtubeUrl,
       versionCheck: this.data.main.versionCheck,
       plexClientIdentifier: this.data.clientId,
+      oneVersionPerTitle: this.data.main.oneVersionPerTitle !== false,
     };
   }
 

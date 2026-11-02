@@ -1176,4 +1176,158 @@ describe('Radarr Scanner', () => {
       );
     });
   });
+
+  describe('version servers', () => {
+    const STANDARD = 0;
+    const RUSSIAN = 1;
+
+    // The standard server has another movie, so its scan counts as complete.
+    function scanWithVersion(
+      tmdbId: number,
+      versionMovie: Partial<RadarrMovie> = {}
+    ): Promise<void> {
+      configureRadarr([
+        { id: STANDARD, hostname: 'radarr' },
+        { id: RUSSIAN, hostname: 'radarr-ru', buttonLabel: 'Russian' },
+      ]);
+      const responses = [
+        [fakeRadarrMovie({ tmdbId: 9999, id: 99 })],
+        [fakeRadarrMovie({ tmdbId, id: 20, ...versionMovie })],
+      ];
+      let call = 0;
+      getMoviesImpl = async () => responses[call++] ?? [];
+      return runWithMockTimers(() => radarrScanner.run());
+    }
+
+    const mediaOf = (tmdbId: number) =>
+      getRepository(Media).findOneOrFail({ where: { tmdbId } });
+
+    it('records a version-only movie without touching the standard version', async () => {
+      await scanWithVersion(580);
+
+      const media = await mediaOf(580);
+      assert.strictEqual(media.status, MediaStatus.UNKNOWN);
+      assert.strictEqual(media.serviceId, null);
+      assert.strictEqual(media.externalServiceId, null);
+      const row = await getRepository(MediaServiceStatus).findOneOrFail({
+        where: { mediaId: media.id, serviceId: RUSSIAN },
+      });
+      assert.strictEqual(row.status, MediaStatus.AVAILABLE);
+      assert.strictEqual(row.externalServiceId, 20);
+    });
+
+    it('completes the version request when its file arrives', async () => {
+      const media = await getRepository(Media).save(
+        new Media({ tmdbId: 581, mediaType: MediaType.MOVIE })
+      );
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+      getSettings().radarr = [];
+      const request = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.MOVIE,
+          media,
+          requestedBy,
+          status: MediaRequestStatus.APPROVED,
+          is4k: false,
+          serverId: RUSSIAN,
+          isServiceRequest: true,
+        })
+      );
+
+      await scanWithVersion(581);
+
+      const updated = await getRepository(MediaRequest).findOneOrFail({
+        where: { id: request.id },
+      });
+      assert.strictEqual(updated.status, MediaRequestStatus.COMPLETED);
+      assert.strictEqual((await mediaOf(581)).status, MediaStatus.UNKNOWN);
+    });
+
+    it('gives a movie that only the version has its standard status back', async () => {
+      // What older builds left behind: available through the version's file.
+      await getRepository(Media).save(
+        new Media({
+          tmdbId: 582,
+          mediaType: MediaType.MOVIE,
+          status: MediaStatus.AVAILABLE,
+          serviceId: RUSSIAN,
+          externalServiceId: 20,
+          externalServiceSlug: 'test-movie',
+        })
+      );
+
+      await scanWithVersion(582);
+
+      const media = await mediaOf(582);
+      assert.strictEqual(media.status, MediaStatus.UNKNOWN);
+      assert.strictEqual(media.serviceId, null);
+      assert.strictEqual(media.externalServiceSlug, null);
+    });
+
+    it('keeps an open standard request pending when repairing', async () => {
+      const media = await getRepository(Media).save(
+        new Media({
+          tmdbId: 583,
+          mediaType: MediaType.MOVIE,
+          status: MediaStatus.PROCESSING,
+          serviceId: RUSSIAN,
+        })
+      );
+      const requestedBy = await getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      });
+      getSettings().radarr = [];
+      await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.MOVIE,
+          media,
+          requestedBy,
+          status: MediaRequestStatus.PENDING,
+          is4k: false,
+        })
+      );
+
+      await scanWithVersion(583, { hasFile: false, monitored: true });
+
+      assert.strictEqual((await mediaOf(583)).status, MediaStatus.PENDING);
+    });
+
+    it('leaves the standard status alone when the standard server has the movie', async () => {
+      configureRadarr([
+        { id: STANDARD, hostname: 'radarr' },
+        { id: RUSSIAN, hostname: 'radarr-ru', buttonLabel: 'Russian' },
+      ]);
+      const responses = [
+        [fakeRadarrMovie({ tmdbId: 584, id: 10 })],
+        [fakeRadarrMovie({ tmdbId: 584, id: 20, titleSlug: 'ru-slug' })],
+      ];
+      let call = 0;
+      getMoviesImpl = async () => responses[call++] ?? [];
+
+      await runWithMockTimers(() => radarrScanner.run());
+
+      const media = await mediaOf(584);
+      assert.strictEqual(media.status, MediaStatus.AVAILABLE);
+      assert.strictEqual(media.serviceId, STANDARD);
+      assert.strictEqual(media.externalServiceId, 10);
+    });
+
+    it('treats every server as standard when all of them are versions', async () => {
+      configureRadarr([
+        { id: 0, hostname: 'radarr-en', buttonLabel: 'English' },
+        { id: 1, hostname: 'radarr-ru', buttonLabel: 'Russian' },
+      ]);
+      const responses = [[], [fakeRadarrMovie({ tmdbId: 585, id: 20 })]];
+      let call = 0;
+      getMoviesImpl = async () => responses[call++] ?? [];
+
+      await runWithMockTimers(() => radarrScanner.run());
+
+      const media = await mediaOf(585);
+      assert.strictEqual(media.status, MediaStatus.AVAILABLE);
+      assert.strictEqual(media.serviceId, 1);
+    });
+  });
 });

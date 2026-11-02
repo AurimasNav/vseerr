@@ -6,11 +6,13 @@ import {
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaRequest from '@server/entity/MediaRequest';
+import MediaServiceStatus from '@server/entity/MediaServiceStatus';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
 import type { ProcessableSeason } from '@server/lib/scanners/baseScanner';
 import BaseScanner from '@server/lib/scanners/baseScanner';
+import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
@@ -37,6 +39,11 @@ class HarnessScanner extends BaseScanner<unknown> {
       title: 'Test Show',
     });
     await this.resolve();
+  }
+
+  // What the Plex and Jellyfin scans pass for a movie file in the library.
+  public scanLibraryMovie(tmdbId: number): Promise<void> {
+    return this.processMovie(tmdbId, { title: 'Test Movie', ratingKey: 'rk' });
   }
 
   public scanAbandonedMovie(tmdbId: number): Promise<void> {
@@ -141,6 +148,64 @@ async function seedInFlightMovie(tmdbId: number): Promise<MediaRequest> {
     })
   );
 }
+
+describe('BaseScanner, version-only titles in a shared library', () => {
+  const versionServers = () => {
+    const settings = getSettings();
+    settings.radarr = [
+      { id: 0, syncEnabled: true },
+      { id: 1, syncEnabled: true, buttonLabel: 'Russian' },
+    ] as RadarrSettings[];
+    settings.sonarr = [];
+  };
+
+  it('does not mark the standard version available from a version file', async () => {
+    const media = await getRepository(Media).save(
+      new Media({ tmdbId: 7100, mediaType: MediaType.MOVIE })
+    );
+    await getRepository(MediaServiceStatus).save(
+      new MediaServiceStatus({
+        mediaId: media.id,
+        serviceId: 1,
+        serviceType: 'radarr',
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+    versionServers();
+
+    await new HarnessScanner().scanLibraryMovie(7100);
+
+    const updated = await getRepository(Media).findOneOrFail({
+      where: { id: media.id },
+    });
+    assert.strictEqual(updated.status, MediaStatus.UNKNOWN);
+    assert.strictEqual(updated.ratingKey, 'rk');
+  });
+
+  it('still marks it available when the standard server has the movie', async () => {
+    const media = await getRepository(Media).save(
+      new Media({ tmdbId: 7101, mediaType: MediaType.MOVIE })
+    );
+    for (const serviceId of [0, 1]) {
+      await getRepository(MediaServiceStatus).save(
+        new MediaServiceStatus({
+          mediaId: media.id,
+          serviceId,
+          serviceType: 'radarr',
+          status: MediaStatus.AVAILABLE,
+        })
+      );
+    }
+    versionServers();
+
+    await new HarnessScanner().scanLibraryMovie(7101);
+
+    const updated = await getRepository(Media).findOneOrFail({
+      where: { id: media.id },
+    });
+    assert.strictEqual(updated.status, MediaStatus.AVAILABLE);
+  });
+});
 
 describe('BaseScanner', () => {
   describe('declineRequestsOnStatusReset gate', () => {

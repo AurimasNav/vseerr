@@ -73,6 +73,8 @@ beforeEach(() => {
   ] as RadarrSettings[];
   settings.sonarr = [{ id: 0, buttonLabel: 'German' }] as SonarrSettings[];
   settings.main.defaultRequestServices = [];
+  delete settings.main.versionHoldHours;
+  delete settings.main.oneVersionPerTitle;
 });
 
 setupTestDb();
@@ -102,7 +104,11 @@ describe('/settings/versions', () => {
     const res = await admin.get('/api/v1/settings/versions');
 
     assert.strictEqual(res.status, 200);
-    assert.deepStrictEqual(res.body, { defaultVersions: ['radarr:1'] });
+    assert.deepStrictEqual(res.body, {
+      defaultVersions: ['radarr:1'],
+      holdHours: 24,
+      oneVersionPerTitle: true,
+    });
   });
 
   it('saves the default versions and drops unknown ones', async () => {
@@ -115,6 +121,8 @@ describe('/settings/versions', () => {
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(res.body, {
       defaultVersions: ['radarr:1', 'sonarr:0'],
+      holdHours: 24,
+      oneVersionPerTitle: true,
     });
     assert.deepStrictEqual(getSettings().main.defaultRequestServices, [
       'radarr:1',
@@ -130,6 +138,40 @@ describe('/settings/versions', () => {
       .send({ defaultVersions: 'radarr:1' });
 
     assert.strictEqual(res.status, 400);
+  });
+
+  it('saves the version request rules without touching the defaults', async () => {
+    getSettings().main.defaultRequestServices = ['radarr:1'];
+    const admin = await loginAs('admin@seerr.dev');
+
+    const res = await admin
+      .post('/api/v1/settings/versions')
+      .send({ holdHours: 0, oneVersionPerTitle: false });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, {
+      defaultVersions: ['radarr:1'],
+      holdHours: 0,
+      oneVersionPerTitle: false,
+    });
+    assert.strictEqual(getSettings().main.versionHoldHours, 0);
+    assert.strictEqual(getSettings().main.oneVersionPerTitle, false);
+  });
+
+  it('rejects invalid rules and empty bodies', async () => {
+    const admin = await loginAs('admin@seerr.dev');
+
+    for (const body of [
+      { holdHours: -1 },
+      { holdHours: 721 },
+      { holdHours: '12' },
+      { oneVersionPerTitle: 'no' },
+      {},
+    ]) {
+      const res = await admin.post('/api/v1/settings/versions').send(body);
+      assert.strictEqual(res.status, 400, JSON.stringify(body));
+    }
+    assert.strictEqual(getSettings().main.versionHoldHours, undefined);
   });
 
   it('is limited to admins', async () => {
