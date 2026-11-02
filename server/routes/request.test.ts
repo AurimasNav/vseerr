@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { before, beforeEach, describe, it, mock } from 'node:test';
+import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import TheMovieDb from '@server/api/themoviedb';
 import type {
@@ -20,6 +20,7 @@ import OverrideRule from '@server/entity/OverrideRule';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
+import cacheManager from '@server/lib/cache';
 import { Permission } from '@server/lib/permissions';
 import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -31,6 +32,8 @@ import {
   assertNoCredentials,
   seedUserSettings,
 } from '@server/test/userSettings';
+import type { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import type { Express } from 'express';
 import express from 'express';
 import session from 'express-session';
@@ -2239,5 +2242,245 @@ describe('POST /request, standard request options', () => {
 
     assert.strictEqual(res.status, 201);
     assert.ok(!res.body.profileId || res.body.profileId === 14);
+  });
+});
+
+describe('version request checks (review H2, M1, M2)', () => {
+  const realAdapter = axios.defaults.adapter;
+
+  beforeEach(() => {
+    configureRadarr([
+      { name: 'Radarr' },
+      { name: 'Radarr German', buttonLabel: 'German' },
+      { name: 'Radarr Anime', buttonLabel: 'Anime', animeOnly: true },
+    ]);
+    configureSonarr([
+      { name: 'Sonarr', coverageMode: 'anyFile' },
+      { name: 'Sonarr German', buttonLabel: 'German' },
+    ]);
+    // Reachable but empty arrs, so coverage only sees open requests.
+    axios.defaults.adapter = async (config: AxiosRequestConfig) =>
+      ({
+        data: [],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }) as never;
+    cacheManager.getCache('radarr').flush();
+    cacheManager.getCache('sonarr').flush();
+  });
+
+  afterEach(() => {
+    axios.defaults.adapter = realAdapter;
+  });
+
+  async function requester(
+    email: string,
+    permissions: number,
+    services: string[] = []
+  ) {
+    const user = new User({
+      email,
+      username: email.split('@')[0],
+      userType: UserType.LOCAL,
+      permissions,
+      avatar: '',
+    });
+    await user.setPassword('test1234');
+    await getRepository(User).save(user);
+    await setUserVersions(user.id, services);
+    return loginAs(email, 'test1234');
+  }
+
+  it('does not let a 4K flag send a standard request to a version server', async () => {
+    const agent = await requester(
+      'fourk@seerr.dev',
+      Permission.REQUEST | Permission.REQUEST_4K
+    );
+
+    const res = await agent
+      .post('/request')
+      .send({ mediaType: 'movie', mediaId: 66001, is4k: true, serverId: 1 });
+
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('takes the 4K setting of a version request from its server', async () => {
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 66002,
+      is4k: true,
+      serverId: 1,
+      isServiceRequest: true,
+    });
+
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.is4k, false);
+    assert.strictEqual(res.body.isServiceRequest, true);
+  });
+
+  it('rejects a version request to a server without a version name', async () => {
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+
+    const res = await admin.post('/request').send({
+      mediaType: 'movie',
+      mediaId: 66003,
+      serverId: 0,
+      isServiceRequest: true,
+    });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('keeps anime-only versions to anime', async () => {
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+    const request = (mediaId: number) =>
+      admin.post('/request').send({
+        mediaType: 'movie',
+        mediaId,
+        serverId: 2,
+        isServiceRequest: true,
+      });
+
+    assert.strictEqual((await request(66004)).status, 400);
+    assert.strictEqual((await request(88004)).status, 201);
+  });
+
+  it('rejects an edit whose media type is not the request type', async () => {
+    const owner = await requester('typed@seerr.dev', Permission.REQUEST);
+    const created = await owner
+      .post('/request')
+      .send({ mediaType: 'tv', mediaId: 66005, seasons: [1] });
+    assert.strictEqual(created.status, 201);
+
+    const res = await owner
+      .put(`/request/${created.body.id}`)
+      .send({ mediaType: 'movie', serverId: 1 });
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('does not let the owner edit a version request after losing its grant', async () => {
+    const owner = await requester('lost@seerr.dev', Permission.REQUEST, [
+      'sonarr:1',
+    ]);
+    const created = await owner.post('/request').send({
+      mediaType: 'tv',
+      mediaId: 66006,
+      seasons: [1],
+      serverId: 1,
+      isServiceRequest: true,
+    });
+    assert.strictEqual(created.status, 201);
+    const user = await getRepository(User).findOneOrFail({
+      where: { email: 'lost@seerr.dev' },
+    });
+    await setUserVersions(user.id, []);
+
+    const res = await owner
+      .put(`/request/${created.body.id}`)
+      .send({ mediaType: 'tv', serverId: 1, seasons: [1, 2] });
+
+    assert.strictEqual(res.status, 403);
+  });
+
+  it('applies the one-version rule to seasons an edit adds', async () => {
+    const owner = await requester('both@seerr.dev', Permission.REQUEST, [
+      'sonarr:1',
+    ]);
+    const standard = await owner
+      .post('/request')
+      .send({ mediaType: 'tv', mediaId: 66007, seasons: [1] });
+    assert.strictEqual(standard.status, 201);
+    // A German request in the owner's name too, as a request manager may
+    // file one; the owner may not then add seasons to either.
+    const media = await getRepository(Media).findOneOrFail({
+      where: { tmdbId: 66007 },
+    });
+    await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.TV,
+        media,
+        requestedBy: standard.body.requestedBy,
+        status: MediaRequestStatus.PENDING,
+        is4k: false,
+        serverId: 1,
+        isServiceRequest: true,
+        seasons: [new SeasonRequest({ seasonNumber: 2 })],
+      })
+    );
+
+    const res = await owner
+      .put(`/request/${standard.body.id}`)
+      .send({ mediaType: 'tv', seasons: [1, 3] });
+
+    assert.strictEqual(res.status, 409);
+  });
+
+  it('leaves out seasons that a fresh request in another version may cover', async () => {
+    const owner = await requester('held@seerr.dev', Permission.REQUEST);
+    const other = await requester('german@seerr.dev', Permission.REQUEST, [
+      'sonarr:1',
+    ]);
+    const standard = await owner
+      .post('/request')
+      .send({ mediaType: 'tv', mediaId: 66008, seasons: [1] });
+    assert.strictEqual(standard.status, 201);
+    const german = await other.post('/request').send({
+      mediaType: 'tv',
+      mediaId: 66008,
+      seasons: [2],
+      serverId: 1,
+      isServiceRequest: true,
+    });
+    assert.strictEqual(german.status, 201);
+
+    const res = await owner
+      .put(`/request/${standard.body.id}`)
+      .send({ mediaType: 'tv', seasons: [1, 2, 3] });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      res.body.seasons
+        .map((season: { seasonNumber: number }) => season.seasonNumber)
+        .sort(),
+      [1, 3]
+    );
+  });
+
+  it('lets a request manager add those seasons', async () => {
+    const owner = await requester('mine@seerr.dev', Permission.REQUEST);
+    const other = await requester('german2@seerr.dev', Permission.REQUEST, [
+      'sonarr:1',
+    ]);
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+    const standard = await owner
+      .post('/request')
+      .send({ mediaType: 'tv', mediaId: 66009, seasons: [1] });
+    assert.strictEqual(standard.status, 201);
+    const german = await other.post('/request').send({
+      mediaType: 'tv',
+      mediaId: 66009,
+      seasons: [2],
+      serverId: 1,
+      isServiceRequest: true,
+    });
+    assert.strictEqual(german.status, 201);
+
+    const res = await admin
+      .put(`/request/${standard.body.id}`)
+      .send({ mediaType: 'tv', seasons: [1, 2] });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      res.body.seasons
+        .map((season: { seasonNumber: number }) => season.seasonNumber)
+        .sort(),
+      [1, 2]
+    );
   });
 });

@@ -1,7 +1,10 @@
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { listCustomFormats } from '@server/lib/mediaVersions';
 import { sanitizeRequestOptions } from '@server/lib/requestOptions';
-import { removeRequestServiceGrants } from '@server/lib/requestServices';
+import {
+  removeRequestServiceGrants,
+  retireVersion,
+} from '@server/lib/requestServices';
 import type { SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
@@ -118,6 +121,7 @@ sonarrRoutes.put<{ id: string }>('/:id', async (req, res) => {
       });
   }
 
+  const previous = settings.sonarr[sonarrIndex];
   settings.sonarr[sonarrIndex] = {
     ...req.body,
     id: Number(req.params.id),
@@ -126,7 +130,13 @@ sonarrRoutes.put<{ id: string }>('/:id', async (req, res) => {
     definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
     coverageMode: sanitizeCoverageMode(req.body.coverageMode),
   } as SonarrSettings;
+  const wasVersion = !!previous.buttonLabel?.trim();
   await settings.save();
+  // A server that loses its version name is a standard server now: nobody
+  // keeps a grant for it, and nothing can be requested as that version.
+  if (wasVersion && !settings.sonarr[sonarrIndex].buttonLabel?.trim()) {
+    await removeRequestServiceGrants('sonarr', previous.id);
+  }
 
   return res.status(200).json(settings.sonarr[sonarrIndex]);
 });
@@ -147,7 +157,9 @@ sonarrRoutes.delete<{ id: string }>('/:id', async (req, res) => {
   const removed = settings.sonarr.splice(sonarrIndex, 1);
   await settings.save();
 
-  await removeRequestServiceGrants('sonarr', removed[0].id);
+  // The next server added may get this id: it must not inherit grants,
+  // open version requests or recorded statuses.
+  await retireVersion('sonarr', removed[0].id);
 
   return res.status(200).json(removed[0]);
 });

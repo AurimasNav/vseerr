@@ -22,8 +22,13 @@ import {
   versionExtra,
 } from '@server/lib/versionLabel';
 import { holdsOtherVersion } from '@server/lib/versionLimit';
+import {
+  VersionTargetError,
+  resolveTarget,
+  versionGrantKey,
+} from '@server/lib/versionRequest';
 import { booleanFromDb, isVersionRequestSql } from '@server/lib/versionSql';
-import { getVersionRules, isVersionDestination } from '@server/lib/versions';
+import { getVersionRules } from '@server/lib/versions';
 import logger from '@server/logger';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
 import requestLock, {
@@ -125,6 +130,28 @@ export class MediaRequest {
       throw new Error('User missing from request context.');
     }
 
+    // VSeerr: the chosen server decides what kind of request this is. A
+    // version request takes its version server's 4K setting, so the 4K flag
+    // cannot be used to skip the version checks below.
+    let target: ReturnType<typeof resolveTarget>;
+    try {
+      target = resolveTarget({
+        mediaType: requestBody.mediaType,
+        serverId: requestBody.serverId,
+        is4k: !!requestBody.is4k,
+        isServiceRequest:
+          !!requestBody.isServiceRequest &&
+          requestBody.serverId != null &&
+          requestBody.serverId >= 0,
+      });
+    } catch (e) {
+      if (e instanceof VersionTargetError) {
+        throw new InvalidServiceRequestError(e.message);
+      }
+      throw e;
+    }
+    requestBody.is4k = target.is4k;
+
     if (
       requestBody.mediaType === MediaType.MOVIE &&
       !requestUser.hasPermission(
@@ -214,44 +241,22 @@ export class MediaRequest {
 
     if (
       isServiceSpecific &&
-      !(
-        requestBody.mediaType === MediaType.MOVIE
-          ? settings.radarr
-          : settings.sonarr
-      ).some((server) => server.id === requestBody.serverId)
-    ) {
-      throw new InvalidServiceRequestError(
-        'Service-specific requests must target a configured server.'
-      );
-    }
-
-    // VSeerr: a version's server is requested as that version, never as the
-    // destination of a standard request.
-    if (
-      !isServiceSpecific &&
-      isVersionDestination(
-        requestBody.mediaType,
-        requestBody.serverId,
-        !!requestBody.is4k
-      )
-    ) {
-      throw new InvalidServiceRequestError(
-        'This server is a version. Request it as that version instead.'
-      );
-    }
-
-    if (
-      isServiceSpecific &&
       !user.hasPermission(Permission.MANAGE_REQUESTS) &&
       !(user.requestServices ?? []).includes(
-        `${requestBody.mediaType === MediaType.MOVIE ? 'radarr' : 'sonarr'}:${
-          requestBody.serverId
-        }`
+        versionGrantKey(requestBody.mediaType, requestBody.serverId as number)
       )
     ) {
       throw new RequestPermissionError(
         'You do not have permission to request in this service.'
       );
+    }
+
+    if (
+      isServiceSpecific &&
+      target.server?.animeOnly &&
+      !isAnimeTitle(tmdbMedia)
+    ) {
+      throw new InvalidServiceRequestError('This version is only for anime.');
     }
 
     if (!media) {

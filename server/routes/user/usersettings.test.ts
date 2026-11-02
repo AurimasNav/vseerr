@@ -6,6 +6,7 @@ import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { checkUser, isAuthenticated } from '@server/middleware/auth';
 import authRoutes from '@server/routes/auth';
@@ -130,5 +131,33 @@ describe('POST /user/:id/settings/linked-accounts/jellyfin/quickconnect', () => 
       where: { id: userId },
     });
     assert.strictEqual(user.jellyfinUserId, null);
+  });
+});
+
+describe('POST /user/:id/settings/permissions, versions (review M3)', () => {
+  it('keeps only grants for versions that exist', async () => {
+    const settings = getSettings();
+    settings.radarr = [
+      { id: 0 },
+      { id: 1, buttonLabel: 'German' },
+    ] as RadarrSettings[];
+    settings.sonarr = [];
+    const { agent } = await loginAs('admin@seerr.dev', 'test1234');
+    const demo = await getRepository(User).findOneOrFail({
+      where: { email: 'demo@seerr.dev' },
+    });
+
+    const res = await agent.post(`/user/${demo.id}/settings/permissions`).send({
+      permissions: demo.permissions,
+      // radarr:0 has no version name and radarr:7 does not exist yet.
+      requestServices: ['radarr:0', 'radarr:1', 'radarr:7', 'sonarr:1'],
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body.requestServices, ['radarr:1']);
+    const saved = await getRepository(User).findOneOrFail({
+      where: { id: demo.id },
+    });
+    assert.deepStrictEqual(saved.requestServices, ['radarr:1']);
   });
 });

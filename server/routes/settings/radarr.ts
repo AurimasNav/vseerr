@@ -1,7 +1,10 @@
 import RadarrAPI from '@server/api/servarr/radarr';
 import { listCustomFormats } from '@server/lib/mediaVersions';
 import { sanitizeRequestOptions } from '@server/lib/requestOptions';
-import { removeRequestServiceGrants } from '@server/lib/requestServices';
+import {
+  removeRequestServiceGrants,
+  retireVersion,
+} from '@server/lib/requestServices';
 import type { RadarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
@@ -119,6 +122,7 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
         });
     }
 
+    const previous = settings.radarr[radarrIndex];
     settings.radarr[radarrIndex] = {
       ...req.body,
       id: Number(req.params.id),
@@ -127,7 +131,13 @@ radarrRoutes.put<{ id: string }, RadarrSettings, RadarrSettings>(
       definingMatch: sanitizeDefiningMatch(req.body.definingMatch),
       coverageMode: sanitizeCoverageMode(req.body.coverageMode),
     } as RadarrSettings;
+    const wasVersion = !!previous.buttonLabel?.trim();
     await settings.save();
+    // A server that loses its version name is a standard server now: nobody
+    // keeps a grant for it, and nothing can be requested as that version.
+    if (wasVersion && !settings.radarr[radarrIndex].buttonLabel?.trim()) {
+      await removeRequestServiceGrants('radarr', previous.id);
+    }
 
     return res.status(200).json(settings.radarr[radarrIndex]);
   }
@@ -173,7 +183,9 @@ radarrRoutes.delete<{ id: string }>('/:id', async (req, res, next) => {
   const removed = settings.radarr.splice(radarrIndex, 1);
   await settings.save();
 
-  await removeRequestServiceGrants('radarr', removed[0].id);
+  // The next server added may get this id: it must not inherit grants,
+  // open version requests or recorded statuses.
+  await retireVersion('radarr', removed[0].id);
 
   return res.status(200).json(removed[0]);
 });

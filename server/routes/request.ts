@@ -24,10 +24,17 @@ import type {
   MediaRequestBody,
   RequestResultsResponse,
 } from '@server/interfaces/api/requestInterfaces';
+import { coverageBlock } from '@server/lib/mediaVersions';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
-import { isVersionDestination } from '@server/lib/versions';
+import { holdsOtherVersion } from '@server/lib/versionLimit';
+import {
+  VersionTargetError,
+  resolveTarget,
+  versionGrantKey,
+} from '@server/lib/versionRequest';
 import { isVersionRequestSql } from '@server/lib/versionSql';
+import { getVersionRules } from '@server/lib/versions';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import requestLock, {
@@ -517,6 +524,15 @@ requestRoutes.put<{ requestId: string }>(
           return next({ status: 404, message: 'Request not found.' });
         }
 
+        // VSeerr: the body's media type picks the permission and server
+        // checks below, so it must be the request's own.
+        if (req.body.mediaType !== request.type) {
+          return next({
+            status: 400,
+            message: 'The media type does not match the request.',
+          });
+        }
+
         if (
           (request.requestedBy.id !== req.user?.id ||
             (req.body.mediaType !== 'tv' &&
@@ -547,18 +563,35 @@ requestRoutes.put<{ requestId: string }>(
           });
         }
 
+        if (!request.isServiceRequest) {
+          try {
+            resolveTarget({
+              mediaType: request.type,
+              serverId: req.body.serverId,
+              is4k: request.is4k,
+              isServiceRequest: false,
+            });
+          } catch (e) {
+            if (e instanceof VersionTargetError) {
+              return next({ status: 400, message: e.message });
+            }
+            throw e;
+          }
+        }
+
+        const isManager = !!req.user?.hasPermission(Permission.MANAGE_REQUESTS);
+
+        // A version request stays with users who may still request in it.
         if (
-          !request.isServiceRequest &&
-          isVersionDestination(
-            req.body.mediaType,
-            req.body.serverId,
-            request.is4k
+          request.isServiceRequest &&
+          !isManager &&
+          !(req.user?.requestServices ?? []).includes(
+            versionGrantKey(request.type, request.serverId as number)
           )
         ) {
           return next({
-            status: 400,
-            message:
-              'This server is a version. Request it as that version instead.',
+            status: 403,
+            message: 'You do not have permission to request in this service.',
           });
         }
 
@@ -704,9 +737,45 @@ requestRoutes.put<{ requestId: string }>(
                   currentSeasons.includes(sn)
                 );
 
-                const newSeasons = filteredSeasons.filter(
+                // VSeerr: the version rules for new requests apply to the
+                // seasons an edit adds, except for request managers.
+                const versionHeldSeasons: number[] = [];
+                const addsSeasons = filteredSeasons.some(
                   (sn) =>
                     !currentSeasons.includes(sn) && !coveredSeasons.includes(sn)
+                );
+                if (addsSeasons && !isManager && !request.is4k) {
+                  if (
+                    getVersionRules().oneVersionPerTitle &&
+                    (await holdsOtherVersion(requestRepository, {
+                      mediaId: media.id,
+                      userId: requestUser.id,
+                      serverId: request.isServiceRequest
+                        ? (request.serverId ?? undefined)
+                        : undefined,
+                    }))
+                  ) {
+                    return next({
+                      status: 409,
+                      message:
+                        'You already requested another version of this title.',
+                    });
+                  }
+                  const block = await coverageBlock({
+                    media,
+                    serverId: request.isServiceRequest
+                      ? (request.serverId ?? undefined)
+                      : undefined,
+                    isServiceRequest: request.isServiceRequest,
+                  });
+                  versionHeldSeasons.push(...(block?.seasons ?? []));
+                }
+
+                const newSeasons = filteredSeasons.filter(
+                  (sn) =>
+                    !currentSeasons.includes(sn) &&
+                    !coveredSeasons.includes(sn) &&
+                    !versionHeldSeasons.includes(sn)
                 );
 
                 const resultingSeasonCount =
