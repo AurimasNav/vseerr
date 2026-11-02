@@ -1,5 +1,6 @@
 import Badge from '@app/components/Common/Badge';
 import { getStatusLabel } from '@app/components/StatusBadge';
+import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import type { VersionChoice, VersionKey } from '@app/utils/versionChoices';
 import { optionApplies } from '@app/utils/versionChoices';
@@ -12,6 +13,11 @@ const messages = defineMessages('components.RequestModal.VersionPicker', {
   chooseversion: 'Choose the version to request.',
   standard: 'Standard',
   notrequested: 'Not requested',
+  requestedby: 'Requested by {user}',
+  requestedbytwo: 'Requested by {user} and {other}',
+  requestedbymany:
+    'Requested by {user} and {count, plural, one {# other} other {# others}}',
+  you: 'you',
   otherversionheld: 'You already requested another version of this title.',
   usebydefault: 'Use this version by default',
   usebydefaultdescription:
@@ -49,7 +55,31 @@ const VersionPicker = ({
   showStatus = true,
 }: VersionPickerProps) => {
   const intl = useIntl();
+  const { user } = useUser();
   const selectedChoice = choices.find((c) => c.key === selected);
+  const nameOf = (requester: { id: number; displayName: string }) =>
+    requester.id === user?.id
+      ? intl.formatMessage(messages.you)
+      : requester.displayName;
+  const requestedBy = (requesters: VersionChoice['requesters']) => {
+    const [first, second] = requesters;
+    if (!first) {
+      return null;
+    }
+    if (requesters.length === 1) {
+      return intl.formatMessage(messages.requestedby, { user: nameOf(first) });
+    }
+    if (requesters.length === 2) {
+      return intl.formatMessage(messages.requestedbytwo, {
+        user: nameOf(first),
+        other: nameOf(second),
+      });
+    }
+    return intl.formatMessage(messages.requestedbymany, {
+      user: nameOf(first),
+      count: requesters.length - 1,
+    });
+  };
   const options =
     selectedChoice?.requestable && onOptionChange ? selectedChoice.options : [];
 
@@ -100,6 +130,14 @@ const VersionPicker = ({
                   <span className="text-sm font-medium text-white">
                     {label}
                   </span>
+                  {showStatus && choice.requesters.length > 0 && (
+                    <span
+                      className="text-xs text-gray-400"
+                      data-testid="version-requesters"
+                    >
+                      {requestedBy(choice.requesters)}
+                    </span>
+                  )}
                   {choice.otherVersionHeld && (
                     <span className="text-xs text-gray-400">
                       {intl.formatMessage(messages.otherversionheld)}

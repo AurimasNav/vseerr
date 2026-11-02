@@ -45,7 +45,56 @@ export interface VersionChoice {
   coveredBy?: string | null;
   /** Movie: another version was just requested and may cover this one. */
   requestedVia?: string | null;
+  /** Users with an open (pending, approved or completed) request, oldest first. */
+  requesters: VersionRequester[];
 }
+
+export interface VersionRequester {
+  id: number;
+  displayName: string;
+}
+
+const OPEN_REQUEST_STATUSES = [
+  MediaRequestStatus.PENDING,
+  MediaRequestStatus.APPROVED,
+  MediaRequestStatus.COMPLETED,
+];
+
+/**
+ * Who requested a version of the title (non-4K, not declined or failed),
+ * oldest request first, each user once. The standard version counts every
+ * request that is not a version request.
+ */
+export const versionRequesters = (
+  media: Pick<Media, 'requests'> | undefined,
+  mediaType: 'movie' | 'tv',
+  key: VersionKey
+): VersionRequester[] => {
+  const seen = new Set<number>();
+  return [...(media?.requests ?? [])]
+    .filter(
+      (request) =>
+        !request.is4k &&
+        OPEN_REQUEST_STATUSES.includes(request.status) &&
+        versionKey(
+          mediaType,
+          request.isServiceRequest ? request.serverId : undefined
+        ) === key
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt ?? 0).getTime() -
+        new Date(b.createdAt ?? 0).getTime()
+    )
+    .flatMap((request) => {
+      const user = request.requestedBy;
+      if (!user || seen.has(user.id)) {
+        return [];
+      }
+      seen.add(user.id);
+      return [{ id: user.id, displayName: user.displayName }];
+    });
+};
 
 export const versionKey = (
   mediaType: 'movie' | 'tv',
@@ -175,6 +224,7 @@ export const getVersionChoices = ({
       ),
       otherVersionHasTitle: hasTitleElsewhere(undefined),
       ...coverageOf(STANDARD_VERSION),
+      requesters: versionRequesters(media, mediaType, STANDARD_VERSION),
     },
   ];
 
@@ -201,6 +251,7 @@ export const getVersionChoices = ({
       options: optionsForTitle(service.requestOptions, isAnime),
       otherVersionHasTitle: hasTitleElsewhere(service.id),
       ...coverageOf(key),
+      requesters: versionRequesters(media, mediaType, key),
     });
   }
 

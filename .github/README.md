@@ -38,17 +38,17 @@ The screenshots use demo data: a standard Radarr plus "German" and "French" vers
 
 <img src="../vseerr-docs/images/admin-version-settings.png" alt="Server settings: version name German, defining format German audio, and the request option 'English is fine until a German dub appears' tied to the German or English profile" width="600">
 
-<img src="../vseerr-docs/images/request-dialog.png" alt="Request dialog with Standard, German and French versions, the German option 'English is fine until a German dub appears' and the quality profile" width="600">
+<img src="../vseerr-docs/images/request-dialog.png" alt="Request dialog: Standard requested by admin; German selected with the option 'English is fine until a German dub appears' and the quality profile; French not requested" width="600">
 
-The user picks a version, ticks any of its request options, and can choose another quality profile of that instance. The default version and the ticked options are saved with the user's account, so they apply on every device.
+Each version shows who has already requested it. The user picks a version, ticks any of its request options, and can choose another quality profile of that instance. The default version and the ticked options are saved with the user's account, so they apply on every device.
 
-**What each version has.** The title page lists every version with what its files contain. Here The Matrix exists in Standard (2160p Remux with Atmos and Dolby Vision) and in German (1080p with German audio). A language the version's profile rewards is highlighted.
+**What each version has.** The title page lists every version with what its files contain. Here The Matrix exists in Standard (2160p Remux with Atmos and Dolby Vision) and in German (1080p with German audio), each with who requested it. A language the version's profile rewards is highlighted.
 
-<img src="../vseerr-docs/images/versions-panel.png" alt="Versions panel: Standard with 2160p, Atmos, Dolby Vision, Remux and English; German with 1080p, English and German highlighted; French not requested" width="320">
+<img src="../vseerr-docs/images/versions-panel.png" alt="Versions panel: Standard with 2160p, Atmos, Dolby Vision, Remux and English, requested by admin; German with 1080p, English and German highlighted, requested by demo; French not requested" width="320">
 
 **Covered by another version.** Inception's Standard file already has German audio, which is a defining format of the German version. German therefore shows as available through Standard, and only users with Manage Requests can request it separately.
 
-<img src="../vseerr-docs/images/versions-coverage.png" alt="Versions panel: Standard with 1080p, English and German audio; German not requested, available through Standard" width="320">
+<img src="../vseerr-docs/images/versions-coverage.png" alt="Versions panel: Standard with 1080p, English and German; German not requested, available through Standard" width="320">
 
 ## Installing
 

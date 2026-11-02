@@ -9,6 +9,7 @@ import {
   initialVersionChoice,
   optionApplies,
   preferenceChanges,
+  versionRequesters,
 } from './versionChoices';
 
 const services = [
@@ -354,5 +355,75 @@ describe('preferenceChanges', () => {
       }),
       {}
     );
+  });
+});
+
+describe('versionRequesters', () => {
+  const by = (
+    id: number,
+    serverId: number | undefined,
+    createdAt: string,
+    over: Record<string, unknown> = {}
+  ) => ({
+    requestedBy: { id, displayName: `user${id}` },
+    is4k: false,
+    isServiceRequest: serverId !== undefined,
+    serverId,
+    status: MediaRequestStatus.APPROVED,
+    createdAt,
+    ...over,
+  });
+  const title = (requests: ReturnType<typeof by>[]) =>
+    ({ requests }) as unknown as Media;
+
+  it('lists who requested each version, oldest first, once each', () => {
+    const requests = title([
+      by(3, 2, '2026-11-03'),
+      by(1, undefined, '2026-11-02'),
+      by(2, 2, '2026-11-01'),
+      by(3, 2, '2026-11-04'),
+    ]);
+    assert.deepStrictEqual(versionRequesters(requests, 'movie', 'radarr:2'), [
+      { id: 2, displayName: 'user2' },
+      { id: 3, displayName: 'user3' },
+    ]);
+    assert.deepStrictEqual(versionRequesters(requests, 'movie', 'standard'), [
+      { id: 1, displayName: 'user1' },
+    ]);
+    assert.deepStrictEqual(
+      versionRequesters(requests, 'movie', 'radarr:1'),
+      []
+    );
+  });
+
+  it('skips declined, failed and 4K requests', () => {
+    const requests = title([
+      by(1, 2, '2026-11-01', { status: MediaRequestStatus.DECLINED }),
+      by(2, 2, '2026-11-01', { status: MediaRequestStatus.FAILED }),
+      by(3, 2, '2026-11-01', { is4k: true }),
+    ]);
+    assert.deepStrictEqual(
+      versionRequesters(requests, 'movie', 'radarr:2'),
+      []
+    );
+  });
+
+  it('is part of every version choice', () => {
+    const [standard, german] = getVersionChoices({
+      mediaType: 'movie',
+      media: {
+        status: MediaStatus.PROCESSING,
+        serviceStatuses: [],
+        requests: [by(5, undefined, '2026-11-01')],
+      } as unknown as Media,
+      services,
+      userId: 7,
+      grants: ['radarr:1'],
+      isManager: false,
+    });
+    assert.deepStrictEqual(standard.requesters, [
+      { id: 5, displayName: 'user5' },
+    ]);
+    assert.deepStrictEqual(german.requesters, []);
   });
 });
