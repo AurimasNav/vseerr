@@ -24,7 +24,7 @@ Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob
 ## Keeping changes small
 
 - **New code in new files.** Put version code in new files where possible, and keep edits to existing Seerr files to small hooks that call into it. The fewer lines VSeerr changes in Seerr's files, the fewer conflicts each release brings.
-- **Additive database changes.** Add new tables or columns. Do not rename, repurpose or drop Seerr's. Every migration needs a SQLite and a PostgreSQL version.
+- **Database changes go in VSeerr's own tables.** New data goes in new `vseerr_*` tables, never in columns or foreign keys on Seerr's tables, so the same database keeps working with Seerr (see [switching](vseerr-docs/switching.md)). Do not rename, repurpose or drop Seerr's tables. Every migration needs a SQLite and a PostgreSQL version.
 - **Do not reformat Seerr's code.** Run the formatter on your own changes only.
 - **No new kinds of stored credentials.**
 - **One topic per pull request.**

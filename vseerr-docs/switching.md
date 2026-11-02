@@ -15,6 +15,7 @@ VSeerr keeps everything it adds in tables of its own, all named `vseerr_*`:
 | `vseerr_service_status` | Availability of each title in each version |
 | `vseerr_parked_request` | Version requests set aside while Seerr uses the database |
 | `vseerr_user_preference` | Each user's default version and ticked request options |
+| `vseerr_row_identity` | A fingerprint of each Seerr user, title and request VSeerr refers to |
 
 It does not add columns to Seerr's tables, and its tables have no foreign keys to them. Seerr ignores these tables, and Seerr's own database updates never touch them.
 
@@ -56,7 +57,8 @@ Start VSeerr. On start it:
 - re-creates the title entry of a parked request if Seerr removed it,
 - drops parked requests whose user was deleted in Seerr,
 - re-creates any VSeerr table that is missing, for example after restoring only Seerr's tables,
-- removes version data that points to deleted requests, titles or users.
+- removes version data that points to deleted requests, titles or users,
+- removes version data whose request, title or user id now belongs to a new one. On SQLite, Seerr's database updates can hand a deleted row's id to the next new row; VSeerr keeps a fingerprint of each row it refers to (creation time; for titles, the TMDB id) in `vseerr_row_identity` to notice.
 
 ## Removing VSeerr's data
 
@@ -80,4 +82,6 @@ The `VSeerr Database Round Trip` workflow runs on every pull request, on SQLite 
 
 Seerr creates a database → VSeerr adds version requests → park → Seerr adds a request → VSeerr restores → VSeerr data removed → Seerr opens the database again.
 
-Each step checks that no request is lost and that each side starts on what the other left behind. The daily upstream check runs the same test against every new Seerr release. To run it yourself: `pnpm vseerr:roundtrip`.
+Each step checks that no request is lost and that each side starts on what the other left behind. The daily upstream check runs the SQLite round trip against every new Seerr release.
+
+To run it yourself from a source checkout: `pnpm vseerr:roundtrip` uses a temporary SQLite file. For Postgres it needs an empty database of its own, named in `VSEERR_ROUNDTRIP_DB_NAME` (with `DB_TYPE=postgres` and the `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS` of that server). **It deletes everything in that database.** It refuses a database with tables it did not create, and ignores `DB_NAME`, but never point it at the database Seerr or VSeerr uses.

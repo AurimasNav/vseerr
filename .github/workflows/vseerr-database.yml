@@ -67,5 +67,37 @@ jobs:
           DB_PORT: '5432'
           DB_USER: vseerr
           DB_PASS: vseerr
-          DB_NAME: vseerr
+          VSEERR_ROUNDTRIP_DB_NAME: vseerr
         run: pnpm vseerr:roundtrip
+
+      # The round trip empties its database first. It must refuse one with
+      # data it did not create: here the database the first run left behind,
+      # without the round trip's marker table, stands in for a real one.
+      - name: Refuses a database it did not create
+        if: matrix.database == 'postgres'
+        env:
+          DB_TYPE: postgres
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USER: vseerr
+          DB_PASS: vseerr
+          PGPASSWORD: vseerr
+          VSEERR_ROUNDTRIP_DB_NAME: vseerr
+        run: |
+          set -euo pipefail
+          db() { psql -h localhost -U vseerr -d vseerr -v ON_ERROR_STOP=1 -tA "$@"; }
+          db -c 'DROP TABLE "vseerr_roundtrip_scratch"'
+          before=$(db -c 'SELECT "id", "email" FROM "user" ORDER BY "id"')
+          if pnpm vseerr:roundtrip > refused.log 2>&1; then
+            cat refused.log
+            echo "::error::The round trip ran on a database it did not create."
+            exit 1
+          fi
+          cat refused.log
+          grep -q "has tables the round trip did not create" refused.log
+          after=$(db -c 'SELECT "id", "email" FROM "user" ORDER BY "id"')
+          if [ -z "$before" ] || [ "$before" != "$after" ]; then
+            echo "::error::The users in the database changed."
+            exit 1
+          fi
+          echo "Refused, and the database was left as it was." >> "$GITHUB_STEP_SUMMARY"

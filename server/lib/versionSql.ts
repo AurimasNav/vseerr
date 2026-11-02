@@ -13,12 +13,14 @@ export const USER_VERSION_TABLE = 'vseerr_user_version';
 export const SERVICE_STATUS_TABLE = 'vseerr_service_status';
 export const PARKED_REQUEST_TABLE = 'vseerr_parked_request';
 export const USER_PREFERENCE_TABLE = 'vseerr_user_preference';
+export const ROW_IDENTITY_TABLE = 'vseerr_row_identity';
 export const VSEERR_TABLES = [
   USER_VERSION_TABLE,
   VERSION_REQUEST_TABLE,
   SERVICE_STATUS_TABLE,
   PARKED_REQUEST_TABLE,
   USER_PREFERENCE_TABLE,
+  ROW_IDENTITY_TABLE,
 ];
 
 /**
