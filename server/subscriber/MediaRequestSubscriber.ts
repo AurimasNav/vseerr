@@ -23,7 +23,7 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import { getSettings } from '@server/lib/settings';
 import {
   requestNotificationLabel,
-  withVersion,
+  versionExtra,
 } from '@server/lib/versionLabel';
 import { isVersionRequestSql } from '@server/lib/versionSql';
 import logger from '@server/logger';
@@ -116,10 +116,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       });
 
       notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
-        event: withVersion(
-          `${entity.is4k ? '4K ' : ''}Movie Request Now Available`,
-          serviceLabel
-        ),
+        event: `${entity.is4k ? '4K ' : ''}Movie Request Now Available`,
         notifyAdmin: false,
         notifySystem: true,
         notifyUser: entity.requestedBy,
@@ -134,6 +131,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         media: latestMedia,
         image: `https://image.tmdb.org/t/p/w600_and_h900_bestv2${movie.poster_path}`,
         request: entity,
+        extra: versionExtra(serviceLabel),
       });
     } catch (e) {
       logger.error('Something went wrong sending media notification(s)', {
@@ -193,10 +191,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       const tv = await tmdb.getTvShow({ tvId: entity.media.tmdbId });
 
       notificationManager.sendNotification(Notification.MEDIA_AVAILABLE, {
-        event: withVersion(
-          `${entity.is4k ? '4K ' : ''}Series Request Now Available`,
-          serviceLabel
-        ),
+        event: `${entity.is4k ? '4K ' : ''}Series Request Now Available`,
         subject: `${tv.name}${
           tv.first_air_date ? ` (${tv.first_air_date.slice(0, 4)})` : ''
         }`,
@@ -211,6 +206,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         image: `https://image.tmdb.org/t/p/w600_and_h900_bestv2${tv.poster_path}`,
         media: latestMedia,
         extra: [
+          ...versionExtra(serviceLabel),
           {
             name: 'Requested Seasons',
             value: entity.seasons
