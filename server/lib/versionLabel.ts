@@ -42,10 +42,6 @@ const serversFor = (type: MediaType): DVRSettings[] => {
   return type === MediaType.MOVIE ? settings.radarr : settings.sonarr;
 };
 
-export const requestVersionLabel = (
-  request: VersionRequest
-): string | undefined => versionLabelFrom(request, serversFor(request.type));
-
 const hasVersions = (servers: LabelServer[]) =>
   servers.some((s) => s.buttonLabel?.trim());
 

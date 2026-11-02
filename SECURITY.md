@@ -24,8 +24,8 @@ VSeerr is a fork of [Seerr](https://github.com/seerr-team/seerr). Most of its co
 
 ## What happens next
 
-We confirm that we received the report and keep you updated while we work on a fix. When the fix is released, we publish a GitHub security advisory and credit you, unless you prefer to stay anonymous. Please keep the issue private until then.
+We confirm that we received the report and keep you updated while we work on a fix. When the fixed image is published, we publish a GitHub security advisory and credit you, unless you prefer to stay anonymous. Please keep the issue private until then.
 
 ## Supported versions
 
-Only the latest release receives security fixes.
+VSeerr is published as container images, not releases. Only the newest image (the highest `<Seerr version>-vseerr.<VSeerr version>` tag, also tagged `main`) receives security fixes.

@@ -11,7 +11,6 @@ import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
   requestNotificationLabel,
-  requestVersionLabel,
   standardLabelFrom,
   versionExtra,
   versionLabelFrom,
@@ -291,17 +290,6 @@ describe('request notifications name the version', () => {
         profileId: 13,
       }),
       'Standard'
-    );
-  });
-
-  it('reads the version from the current settings', () => {
-    assert.strictEqual(
-      requestVersionLabel({
-        type: MediaType.TV,
-        isServiceRequest: true,
-        serverId: 1,
-      }),
-      'Russian'
     );
   });
 });

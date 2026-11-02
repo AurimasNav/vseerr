@@ -57,10 +57,12 @@ jobs:
             echo "Seerr $tag is already merged into main." >> "$GITHUB_STEP_SUMMARY"
             needed=false
           else
-            existing=$(gh issue list --state open --label upstream-release \
+            # Open or closed: closing the issue without merging means "not now",
+            # so it is not opened again every day.
+            existing=$(gh issue list --state all --label upstream-release \
               --search "\"Seerr $tag\" in:title" --json number --jq 'length')
             if [ "$existing" != "0" ]; then
-              echo "An issue for Seerr $tag is already open." >> "$GITHUB_STEP_SUMMARY"
+              echo "An issue for Seerr $tag already exists." >> "$GITHUB_STEP_SUMMARY"
               needed=false
             fi
           fi
@@ -95,37 +97,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The same script people run to merge a release by hand, so the merge
+      # tested here is the merge they get.
       - name: Merge the release into main (locally only)
         id: merge
+        shell: pwsh
         run: |
-          set -euo pipefail
-          git fetch --quiet --no-tags https://github.com/seerr-team/seerr.git \
-            "refs/tags/$TAG:refs/tags/$TAG"
           git config user.name 'vseerr-upstream-check'
           git config user.email 'vseerr-upstream-check@users.noreply.github.com'
-          git config merge.ours.driver true
-          kept=""
-          while IFS= read -r path; do
-            case "$path" in ''|'#'*) continue ;; esac
-            echo "$path merge=ours" >> .git/info/attributes
-            kept+="$path "
-          done < .github/vseerr-owned-files
-          base=$(git merge-base HEAD "$TAG")
-          workflows=$(git diff --name-only "$base" "$TAG" -- .github/workflows | tr '\n' ' ')
-          if git merge --no-ff --no-commit "$TAG" > /tmp/merge.log 2>&1; then
-            merge=clean
-            conflicts=""
-          else
-            merge=conflict
-            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
-          fi
-          {
-            echo "merge=$merge"
-            echo "conflicts=$conflicts"
-            echo "kept=$kept"
-            echo "workflows=$workflows"
-          } >> "$GITHUB_OUTPUT"
-          cat /tmp/merge.log
+          ./bin/Merge-SeerrRelease.ps1 -Tag $env:TAG -OutputFile $env:GITHUB_OUTPUT
 
       - name: Pnpm Setup
         if: steps.merge.outputs.merge == 'clean'
@@ -257,7 +237,12 @@ jobs:
               echo "VSeerr's own versions of these files are kept; check the release for anything to copy over by hand: $(for f in $KEPT; do printf '`%s` ' "$f"; done)"
               echo
             fi
-            echo "To update: merge \`$TAG\` into a branch, resolve what is listed above, and open a pull request."
+            echo "To update, merge the release on a new branch with the same script this check uses, resolve what is listed above, commit, and open a pull request:"
+            echo
+            echo '```sh'
+            echo "git switch -c seerr-$TAG origin/main"
+            echo "pwsh ./bin/Merge-SeerrRelease.ps1 -Tag $TAG"
+            echo '```'
             echo
             echo "[Workflow run]($RUN_URL)"
           } > /tmp/body.md
