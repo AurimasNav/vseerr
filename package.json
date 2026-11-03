@@ -73,7 +73,7 @@
     "lru-cache": "11.2.1",
     "mime": "^4.1.0",
     "nanoid": "^5.1.7",
-    "next": "16.2.6",
+    "next": "16.4.1",
     "ip-address": "^10.2.0",
     "node-gyp": "12.2.0",
     "node-schedule": "2.1.1",
