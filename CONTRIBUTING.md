@@ -29,6 +29,17 @@ Seerr has its own [contribution policy](https://github.com/seerr-team/seerr/blob
 - **No new kinds of stored credentials.**
 - **One topic per pull request.**
 
+## Dependency updates
+
+VSeerr updates a dependency ahead of Seerr only to fix a high or critical vulnerability in the published image. The daily image scan lists them in the Security tab.
+
+- **Seerr has already fixed it:** cherry-pick Seerr's commit from its `develop` branch. The next release then merges without a conflict.
+- **Seerr has not:** make the smallest change that fixes it, such as a version bump or a `pnpm.overrides` entry for a nested dependency. Say in the pull request when it can be dropped, for example "once Seerr updates email-templates".
+- **Not in the image:** alerts for `gen-docs/` (Seerr's documentation site) and `bin/duplicate-detector/` are dismissed, not fixed. Nothing in either folder is built into the image or run.
+- Medium and low findings, and all other updates, come with Seerr releases. Renovate opens pull requests for security fixes only.
+
+When a Seerr release conflicts in `pnpm-lock.yaml`, `bin/Merge-SeerrRelease.ps1` takes Seerr's lockfile and lets pnpm apply VSeerr's versions again.
+
 ## Branches
 
 - `main` is VSeerr: the latest Seerr release plus VSeerr's changes. Open pull requests against `main`.

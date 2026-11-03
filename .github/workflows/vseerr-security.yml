@@ -79,6 +79,7 @@ jobs:
           set -euo pipefail
           for side in base head; do
             trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --skip-dirs '**/gen-docs' --skip-dirs '**/bin/duplicate-detector' \
               --format json --output "$side.json" --quiet "$side"
           done
 
@@ -140,9 +141,13 @@ jobs:
           tar xzf "$tv" -C "$HOME/bin" trivy
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
+      # gen-docs (Seerr's documentation site) and bin/duplicate-detector (a
+      # helper for a workflow VSeerr disables) are not built into the image or
+      # run anywhere, so their dependencies are not scanned.
       - name: Scan dependencies and configuration
         run: >
           trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --ignore-unfixed
+          --skip-dirs '**/gen-docs' --skip-dirs '**/bin/duplicate-detector'
           --format sarif --output trivy.sarif --quiet .
 
       - name: Summary

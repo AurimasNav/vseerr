@@ -10,6 +10,12 @@ Files listed in .github/vseerr-owned-files keep VSeerr's version (the "ours"
 merge driver), so Seerr's edits to them never cause conflicts. The merge is
 left uncommitted: resolve any conflicts, review the result, then commit.
 
+pnpm-lock.yaml is generated, so a conflict in it is not resolved by hand: the
+script takes Seerr's lockfile and runs pnpm to apply VSeerr's package.json
+(its version bumps and pnpm.overrides) to it again. This needs pnpm on PATH
+and a package.json without conflicts; otherwise the lockfile stays in the
+conflict list, with the commands to run once package.json is resolved.
+
 The daily upstream check (.github/workflows/vseerr-upstream-check.yml) runs
 this script too, so a merge made by hand matches the one it tested.
 
@@ -20,8 +26,8 @@ The Seerr release tag, for example v3.6.0.
 Where to fetch the tag from. Defaults to Seerr's repository.
 
 .PARAMETER OutputFile
-Also write the result (merge, conflicts, kept, workflows) as key=value lines
-to this file. Used for GITHUB_OUTPUT.
+Also write the result (merge, conflicts, kept, workflows, lockfile) as
+key=value lines to this file. Used for GITHUB_OUTPUT.
 
 .EXAMPLE
 git switch -c seerr-v3.6.0 origin/main
@@ -90,7 +96,30 @@ $conflicts = @(git diff --name-only --diff-filter=U)
 if (-not $merged -and $conflicts.Count -eq 0) {
   throw "git merge $Tag failed without conflicts; see the output above."
 }
-$result = $merged ? 'clean' : 'conflict'
+
+$lockfile = 'unchanged'
+if ($conflicts -contains 'pnpm-lock.yaml') {
+  $lockfile = 'conflict'
+  $fix = 'git checkout --theirs -- pnpm-lock.yaml; pnpm install --lockfile-only --ignore-scripts; git add pnpm-lock.yaml'
+  if ($conflicts -contains 'package.json') {
+    Write-Information "pnpm-lock.yaml: resolve package.json first, then run: $fix" -InformationAction Continue
+  } elseif (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+    Write-Information "pnpm-lock.yaml: pnpm is not installed. Install it, then run: $fix" -InformationAction Continue
+  } else {
+    try {
+      git checkout --theirs -- pnpm-lock.yaml
+      pnpm install --lockfile-only --ignore-scripts
+      git add pnpm-lock.yaml
+      $lockfile = 'regenerated'
+      $conflicts = @($conflicts | Where-Object { $_ -ne 'pnpm-lock.yaml' })
+      Write-Information "pnpm-lock.yaml: took Seerr's lockfile and applied VSeerr's package.json to it." -InformationAction Continue
+    } catch {
+      Write-Warning "pnpm-lock.yaml: could not regenerate it ($($_.Exception.Message)). Run: $fix"
+      git checkout --merge -- pnpm-lock.yaml
+    }
+  }
+}
+$result = ($merged -or $conflicts.Count -eq 0) ? 'clean' : 'conflict'
 
 Write-Information "Seerr $Tag merged: $result. Nothing is committed yet." -InformationAction Continue
 if ($conflicts.Count -gt 0) {
@@ -107,5 +136,6 @@ if ($OutputFile) {
     "conflicts=$($conflicts -join ' ')"
     "kept=$($owned -join ' ')"
     "workflows=$($workflows -join ' ')"
+    "lockfile=$lockfile"
   )
 }
