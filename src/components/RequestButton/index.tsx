@@ -4,7 +4,10 @@ import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { getLabelledServices } from '@app/utils/serviceRequestStatus';
+import {
+  getLabelledServices,
+  isSlotRequest,
+} from '@app/utils/serviceRequestStatus';
 import { getVersionChoices } from '@app/utils/versionChoices';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import {
@@ -88,14 +91,12 @@ const RequestButton = ({
   const activeRequests = media?.requests.filter(
     (request) =>
       request.status === MediaRequestStatus.PENDING &&
-      !request.is4k &&
-      !request.isServiceRequest
+      isSlotRequest(request, null, false)
   );
   const active4kRequests = media?.requests.filter(
     (request) =>
       request.status === MediaRequestStatus.PENDING &&
-      request.is4k &&
-      !request.isServiceRequest
+      isSlotRequest(request, null, true)
   );
 
   // Current user's pending request, or the first pending request

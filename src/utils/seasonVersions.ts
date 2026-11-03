@@ -1,6 +1,7 @@
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { VersionDetails } from '@server/lib/mediaVersions';
+import { isSlotRequest } from './serviceRequestStatus';
 
 // VSeerr: which versions hold a season's episodes, for the season rows of a
 // show's page.
@@ -78,8 +79,7 @@ export const standardSeasonRequest = <
   (requests ?? [])
     .filter(
       (request) =>
-        !request.isServiceRequest &&
-        request.is4k === is4k &&
+        isSlotRequest(request, null, is4k) &&
         request.seasons.some((season) => season.seasonNumber === seasonNumber)
     )
     .sort(

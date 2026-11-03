@@ -17,6 +17,8 @@ import defineMessages from '@app/utils/defineMessages';
 import {
   getLabelledServices,
   getMediaServiceStatus,
+  getSlotStatus,
+  isSlotRequest,
 } from '@app/utils/serviceRequestStatus';
 import { holdsOtherVersion } from '@app/utils/versionChoices';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
@@ -111,18 +113,14 @@ const CollectionRequestModal = ({
     (quota?.movie.remaining ?? 0) - selectedParts.length;
 
   const getPartStatus = (part: MovieResult): MediaStatus | undefined =>
-    requestServerId != null
-      ? getMediaServiceStatus(part.mediaInfo, requestServerId).status
-      : part.mediaInfo?.[is4k ? 'status4k' : 'status'];
+    getSlotStatus(part.mediaInfo, requestServerId, is4k);
 
   const getPartRequest = (tmdbId: number): MediaRequest | undefined => {
     const part = (data?.parts ?? []).find((part) => part.id === tmdbId);
 
     return (part?.mediaInfo?.requests ?? []).find(
       (request) =>
-        (requestServerId != null
-          ? request.isServiceRequest && request.serverId === requestServerId
-          : !request.isServiceRequest && request.is4k === is4k) &&
+        isSlotRequest(request, requestServerId, is4k) &&
         request.status !== MediaRequestStatus.DECLINED &&
         request.status !== MediaRequestStatus.COMPLETED
     );

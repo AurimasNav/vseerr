@@ -11,6 +11,7 @@ import {
   preferenceChanges,
   versionLoading,
   versionRequesters,
+  versionSlots,
 } from './versionChoices';
 
 const services = [
@@ -537,6 +538,44 @@ describe('versionLoading (review M5)', () => {
         preferences: waiting,
       }),
       true
+    );
+  });
+});
+
+describe('versionSlots', () => {
+  it('lists Standard first, then the versions', () => {
+    assert.deepEqual(
+      versionSlots('movie', services).map((slot) => [
+        slot.key,
+        slot.serverId,
+        slot.label,
+        slot.server?.id,
+      ]),
+      [
+        ['standard', undefined, undefined, 0],
+        ['radarr:1', 1, 'German', 1],
+        ['radarr:2', 2, 'French', 2],
+      ]
+    );
+  });
+
+  it('adds anime-only versions for anime', () => {
+    assert.deepEqual(
+      versionSlots('tv', services, true).map((slot) => slot.key),
+      ['standard', 'sonarr:1', 'sonarr:2', 'sonarr:3']
+    );
+  });
+
+  it('is only Standard without versions', () => {
+    assert.deepEqual(
+      versionSlots('movie', [
+        { id: 0, isDefault: true },
+      ] as ServiceCommonServer[]).map((slot) => slot.key),
+      ['standard']
+    );
+    assert.deepEqual(
+      versionSlots('movie', undefined).map((slot) => slot.key),
+      ['standard']
     );
   });
 });

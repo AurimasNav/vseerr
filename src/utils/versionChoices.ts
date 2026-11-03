@@ -8,10 +8,7 @@ import {
   standardOptionServer,
 } from '@server/lib/requestOptions';
 import type { VersionCoverageResult } from '@server/lib/versionCoverage';
-import {
-  getLabelledServices,
-  getMediaServiceStatus,
-} from './serviceRequestStatus';
+import { getLabelledServices, getSlotStatus } from './serviceRequestStatus';
 
 // The versions a user can pick from when requesting a title. The standard
 // version (no server id) is the regular Seerr request. Users without the
@@ -98,11 +95,44 @@ export const versionRequesters = (
 
 export const versionKey = (
   mediaType: 'movie' | 'tv',
-  serverId?: number
+  serverId?: number | null
 ): VersionKey =>
   serverId == null
     ? STANDARD_VERSION
     : `${mediaType === 'movie' ? 'radarr' : 'sonarr'}:${serverId}`;
+
+export interface VersionSlot {
+  key: VersionKey;
+  /** Undefined for Standard. */
+  serverId?: number;
+  /** The version name; undefined for Standard. */
+  label?: string;
+  /** Whose request options apply: for Standard, the default server's. */
+  server?: ServiceCommonServer;
+}
+
+/**
+ * The versions a title can be requested in: Standard first, then every
+ * server with a version name (anime-only ones for anime only).
+ */
+export const versionSlots = (
+  mediaType: 'movie' | 'tv',
+  services: ServiceCommonServer[] | undefined,
+  isAnime = false
+): VersionSlot[] => [
+  {
+    key: STANDARD_VERSION,
+    server: standardOptionServer(services ?? [], false),
+  },
+  ...getLabelledServices(services)
+    .filter((service) => !service.animeOnly || isAnime)
+    .map((service) => ({
+      key: versionKey(mediaType, service.id),
+      serverId: service.id,
+      label: service.buttonLabel,
+      server: service,
+    })),
+];
 
 /** The versions of a title the user has non-4K, not declined requests in. */
 export const heldVersions = (
@@ -197,68 +227,49 @@ export const getVersionChoices = ({
     return !isManager && ('coveredBy' in c || 'requestedVia' in c);
   };
 
-  const standardStatus = media?.status ?? MediaStatus.UNKNOWN;
-  const standardServers = (services ?? []).filter((s) => !s.is4k);
+  const nonUhdServers = (services ?? []).filter((s) => !s.is4k);
   const hasTitleElsewhere = (serverId?: number) =>
     otherVersionHasTitle({
       serverId,
-      standardStatus,
+      standardStatus: media?.status ?? MediaStatus.UNKNOWN,
       serviceStatuses: media?.serviceStatuses ?? [],
-      standardServerIds: standardServers
+      standardServerIds: nonUhdServers
         .filter((s) => !s.buttonLabel?.trim())
         .map((s) => s.id),
-      versionServerIds: standardServers
+      versionServerIds: nonUhdServers
         .filter((s) => !!s.buttonLabel?.trim())
         .map((s) => s.id),
     });
-  const choices: VersionChoice[] = [
-    {
-      key: STANDARD_VERSION,
-      status: standardStatus,
-      requestable:
-        !blocklisted &&
-        (standardRequestable ?? isOpenStatus(mediaType, standardStatus)) &&
-        !closedByOtherVersion(STANDARD_VERSION) &&
-        !closedByCoverage(STANDARD_VERSION),
-      otherVersionHeld: closedByOtherVersion(STANDARD_VERSION),
-      options: optionsForTitle(
-        standardOptionServer(services ?? [], false)?.requestOptions,
-        isAnime
-      ),
-      otherVersionHasTitle: hasTitleElsewhere(undefined),
-      ...coverageOf(STANDARD_VERSION),
-      requesters: versionRequesters(media, mediaType, STANDARD_VERSION),
-    },
-  ];
 
-  for (const service of getLabelledServices(services)) {
-    if (service.animeOnly && !isAnime) {
-      continue;
-    }
-    const key = versionKey(mediaType, service.id);
-    if (!isManager && !grants.includes(key)) {
-      continue;
-    }
-    const { status } = getMediaServiceStatus(media as Media, service.id);
-    choices.push({
-      key,
-      serverId: service.id,
-      label: service.buttonLabel,
-      status,
-      requestable:
-        !blocklisted &&
-        isOpenStatus(mediaType, status) &&
-        !closedByOtherVersion(key) &&
-        !closedByCoverage(key),
-      otherVersionHeld: closedByOtherVersion(key),
-      options: optionsForTitle(service.requestOptions, isAnime),
-      otherVersionHasTitle: hasTitleElsewhere(service.id),
-      ...coverageOf(key),
-      requesters: versionRequesters(media, mediaType, key),
+  return versionSlots(mediaType, services, isAnime)
+    .filter(
+      (slot) =>
+        slot.serverId === undefined || isManager || grants.includes(slot.key)
+    )
+    .map((slot) => {
+      const status = getSlotStatus(media, slot.serverId) ?? MediaStatus.UNKNOWN;
+      const open =
+        slot.serverId === undefined && standardRequestable !== undefined
+          ? standardRequestable
+          : isOpenStatus(mediaType, status);
+      return {
+        key: slot.key,
+        ...(slot.serverId !== undefined
+          ? { serverId: slot.serverId, label: slot.label }
+          : {}),
+        status,
+        requestable:
+          !blocklisted &&
+          open &&
+          !closedByOtherVersion(slot.key) &&
+          !closedByCoverage(slot.key),
+        otherVersionHeld: closedByOtherVersion(slot.key),
+        options: optionsForTitle(slot.server?.requestOptions, isAnime),
+        otherVersionHasTitle: hasTitleElsewhere(slot.serverId),
+        ...coverageOf(slot.key),
+        requesters: versionRequesters(media, mediaType, slot.key),
+      };
     });
-  }
-
-  return choices;
 };
 
 /** Preference name of the default version (saved per user, see the API). */

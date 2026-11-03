@@ -133,8 +133,56 @@ export const getServiceSlotStatus = (
   return { status, downloadItem: serviceStatus?.downloadStatus ?? [] };
 };
 
+// VSeerr: a title can be requested in several versions. Standard is the
+// version without a server id: its requests are Seerr's own and its status
+// is Seerr's, which also counts the media server. Every other version is a
+// Radarr/Sonarr server with a version name, and its status comes from that
+// server's row. These helpers give every version the same code path.
+
+/** Whether a request belongs to a version (`serverId`) or to Standard. */
+export const isSlotRequest = (
+  request: {
+    isServiceRequest?: boolean;
+    serverId?: number | null;
+    is4k: boolean;
+  },
+  serverId: number | null | undefined,
+  is4k = false
+): boolean =>
+  serverId != null
+    ? !!request.isServiceRequest && request.serverId === serverId
+    : !request.isServiceRequest && request.is4k === is4k;
+
+type SlotMedia = Pick<Media, 'serviceStatuses' | 'requests'> &
+  Partial<Pick<Media, 'status' | 'status4k' | 'seasons'>>;
+
+/** A title's status in a version (`serverId`) or in Standard. */
+export const getSlotStatus = (
+  media: SlotMedia | undefined,
+  serverId: number | null | undefined,
+  is4k = false
+): MediaStatus | undefined =>
+  serverId != null
+    ? getMediaServiceStatus(media, serverId).status
+    : media?.[is4k ? 'status4k' : 'status'];
+
+/** A season's status in a version (`serverId`) or in Standard. */
+export const getSlotSeasonStatus = (
+  media: SlotMedia | undefined,
+  serverId: number | null | undefined,
+  seasonNumber: number,
+  is4k = false
+): MediaStatus | undefined =>
+  serverId != null
+    ? media?.serviceStatuses?.find(
+        (serviceStatus) => serviceStatus.serviceId === serverId
+      )?.seasonStatuses?.[seasonNumber]
+    : media?.seasons?.find((season) => season.seasonNumber === seasonNumber)?.[
+        is4k ? 'status4k' : 'status'
+      ];
+
 export const getMediaServiceStatus = (
-  media: Media | undefined,
+  media: Pick<Media, 'serviceStatuses' | 'requests'> | undefined,
   serviceId: number
 ): { status: MediaStatus; downloadItem: DownloadingItem[] } => {
   const serviceStatus = media?.serviceStatuses?.find(

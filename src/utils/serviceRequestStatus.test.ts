@@ -6,8 +6,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   getServiceStatusItems,
+  getSlotSeasonStatus,
+  getSlotStatus,
   getStandardServiceId,
   isCoveredByServiceStatus,
+  isSlotRequest,
 } from './serviceRequestStatus';
 
 const server = (
@@ -197,5 +200,63 @@ describe('standard status coverage', () => {
       ),
       false
     );
+  });
+});
+
+describe('slots: Standard and versions through one path', () => {
+  const standardRequest = { isServiceRequest: false, is4k: false };
+  const standard4kRequest = { isServiceRequest: false, is4k: true };
+  const versionRequest = { isServiceRequest: true, serverId: 2, is4k: false };
+
+  it('matches a request to Standard, Standard 4K or its version', () => {
+    assert.equal(isSlotRequest(standardRequest, undefined), true);
+    assert.equal(isSlotRequest(standardRequest, null, true), false);
+    assert.equal(isSlotRequest(standard4kRequest, null, true), true);
+    assert.equal(isSlotRequest(versionRequest, undefined), false);
+    assert.equal(isSlotRequest(versionRequest, 2), true);
+    assert.equal(isSlotRequest(versionRequest, 3), false);
+    assert.equal(isSlotRequest(standardRequest, 2), false);
+  });
+
+  const media = {
+    status: MediaStatus.AVAILABLE,
+    status4k: MediaStatus.UNKNOWN,
+    seasons: [
+      { seasonNumber: 1, status: MediaStatus.AVAILABLE },
+      { seasonNumber: 2, status: MediaStatus.PROCESSING },
+    ],
+    serviceStatuses: [
+      serviceStatus(0, MediaStatus.PROCESSING, { 1: MediaStatus.PROCESSING }),
+      serviceStatus(2, MediaStatus.PARTIALLY_AVAILABLE, {
+        1: MediaStatus.AVAILABLE,
+      }),
+    ],
+    requests: [pendingRequest(3)],
+  } as unknown as Parameters<typeof getSlotStatus>[0];
+
+  it('reads Standard from Seerr, not from its server row', () => {
+    // Seerr also counts the media server: the row of server 0 says
+    // processing (an upgrade), but the title is available.
+    assert.equal(getSlotStatus(media, undefined), MediaStatus.AVAILABLE);
+    assert.equal(getSlotStatus(media, null, true), MediaStatus.UNKNOWN);
+  });
+
+  it('reads a version from its row, or from its open request', () => {
+    assert.equal(getSlotStatus(media, 2), MediaStatus.PARTIALLY_AVAILABLE);
+    assert.equal(getSlotStatus(media, 3), MediaStatus.PENDING);
+    assert.equal(getSlotStatus(media, 4), MediaStatus.UNKNOWN);
+  });
+
+  it('reads season statuses the same way', () => {
+    assert.equal(
+      getSlotSeasonStatus(media, undefined, 1),
+      MediaStatus.AVAILABLE
+    );
+    assert.equal(
+      getSlotSeasonStatus(media, undefined, 2),
+      MediaStatus.PROCESSING
+    );
+    assert.equal(getSlotSeasonStatus(media, 2, 1), MediaStatus.AVAILABLE);
+    assert.equal(getSlotSeasonStatus(media, 2, 2), undefined);
   });
 });
