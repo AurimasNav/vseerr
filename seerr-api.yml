@@ -7741,8 +7741,68 @@ paths:
                           type: object
                         seasonSummaries:
                           type: object
+                        seasonEpisodes:
+                          type: object
+                          description: Show only. Episode numbers this version has a file for, per season.
+                          additionalProperties:
+                            type: array
+                            items:
+                              type: number
                         coverage:
                           type: object
+        '404':
+          description: Media item does not exist
+  /media/{mediaId}/versions/season/{seasonNumber}:
+    get:
+      summary: Get the versions of each episode in a season
+      description: VSeerr. For each episode of the season that at least one version has a file for, the versions holding it and what each file contains. Available to every signed-in user.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: seasonNumber
+          description: Season number
+          required: true
+          example: '1'
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Episodes and the versions holding them
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  episodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        episodeNumber:
+                          type: number
+                          example: 1
+                        versions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              key:
+                                type: string
+                                example: sonarr:1
+                              label:
+                                type: string
+                                example: German
+                              summary:
+                                type: object
         '404':
           description: Media item does not exist
   /media/{mediaId}/watch_data:

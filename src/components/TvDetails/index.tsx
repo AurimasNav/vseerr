@@ -26,6 +26,7 @@ import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import ServiceStatusBadges from '@app/components/StatusBadge/ServiceStatusBadges';
 import Season from '@app/components/TvDetails/Season';
+import SeasonVersionBadges from '@app/components/TvDetails/SeasonVersionBadges';
 import VersionsPanel from '@app/components/VersionsPanel';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
@@ -38,6 +39,11 @@ import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import {
+  seasonHolders,
+  standardSeasonRequest,
+} from '@app/utils/seasonVersions';
+import {
+  getLabelledServices,
   getServiceStatusItems,
   getStandardServiceId,
   isCoveredByServiceStatus,
@@ -69,6 +75,7 @@ import {
 } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
+import type { MediaVersionsResponse } from '@server/lib/mediaVersions';
 import type { TvDetails as TvDetailsType } from '@server/models/Tv';
 import type { Crew } from '@server/models/common';
 import axios from 'axios';
@@ -163,6 +170,13 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
 
   const { data: sonarrServices } = useSWR<ServiceCommonServer[]>(
     '/api/v1/service/sonarr'
+  );
+  // VSeerr: which version holds which episodes, for the season rows. The
+  // Versions panel reads the same data.
+  const { data: versionFiles } = useSWR<MediaVersionsResponse>(
+    getLabelledServices(sonarrServices).length > 0 && data?.mediaInfo?.id
+      ? `/api/v1/media/${data.mediaInfo.id}/versions`
+      : null
   );
 
   const sortedCrew = useMemo(
@@ -876,30 +890,18 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   serviceStatuses: data.mediaInfo?.serviceStatuses,
                   seasonNumber: season.seasonNumber,
                 });
-                const request = (data.mediaInfo?.requests ?? [])
-                  .filter(
-                    (r) =>
-                      !!r.seasons.find(
-                        (s) => s.seasonNumber === season.seasonNumber
-                      ) && !r.is4k
-                  )
-                  .sort(
-                    (a, b) =>
-                      new Date(b.createdAt).getTime() -
-                      new Date(a.createdAt).getTime()
-                  )[0];
-                const request4k = (data.mediaInfo?.requests ?? [])
-                  .filter(
-                    (r) =>
-                      !!r.seasons.find(
-                        (s) => s.seasonNumber === season.seasonNumber
-                      ) && r.is4k
-                  )
-                  .sort(
-                    (a, b) =>
-                      new Date(b.createdAt).getTime() -
-                      new Date(a.createdAt).getTime()
-                  )[0];
+                // VSeerr: standard requests only; version requests have
+                // their own badges.
+                const request = standardSeasonRequest(
+                  data.mediaInfo?.requests,
+                  season.seasonNumber,
+                  false
+                );
+                const request4k = standardSeasonRequest(
+                  data.mediaInfo?.requests,
+                  season.seasonNumber,
+                  true
+                );
 
                 if (season.episodeCount === 0) {
                   return null;
@@ -962,26 +964,28 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                               </div>
                             </>
                           )}
+                          {/* VSeerr: each version's status of the season,
+                              shown whether or not Standard has it. */}
+                          <SeasonVersionBadges
+                            seasonNumber={season.seasonNumber}
+                            episodeCount={season.episodeCount}
+                            media={data.mediaInfo}
+                            services={sonarrServices}
+                            versions={versionFiles?.versions}
+                          />
                           {(mSeason?.status ===
                             MediaStatus.PARTIALLY_AVAILABLE ||
-                            mSeason?.status === MediaStatus.AVAILABLE) && (
-                            <>
-                              <div className="hidden items-center space-x-1 md:flex">
-                                <ServiceStatusBadges
-                                  serviceStatuses={
-                                    data.mediaInfo?.serviceStatuses
-                                  }
-                                  mediaType="tv"
-                                  seasonNumber={season.seasonNumber}
-                                />
-                                {!isCoveredByServiceStatus(
-                                  seasonServiceItems,
-                                  getStandardServiceId(
-                                    sonarrServices,
-                                    data.mediaInfo,
-                                    false
-                                  )
-                                ) && (
+                            mSeason?.status === MediaStatus.AVAILABLE) &&
+                            !isCoveredByServiceStatus(
+                              seasonServiceItems,
+                              getStandardServiceId(
+                                sonarrServices,
+                                data.mediaInfo,
+                                false
+                              )
+                            ) && (
+                              <>
+                                <div className="hidden md:flex">
                                   <Badge badgeType="success">
                                     {intl.formatMessage(
                                       mSeason?.status === MediaStatus.AVAILABLE
@@ -989,13 +993,12 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                                         : globalMessages.partiallyavailable
                                     )}
                                   </Badge>
-                                )}
-                              </div>
-                              <div className="flex md:hidden">
-                                <StatusBadgeMini status={mSeason!.status} />
-                              </div>
-                            </>
-                          )}
+                                </div>
+                                <div className="flex md:hidden">
+                                  <StatusBadgeMini status={mSeason!.status} />
+                                </div>
+                              </>
+                            )}
                           {mSeason?.status === MediaStatus.DELETED &&
                             request?.status !== MediaRequestStatus.APPROVED && (
                               <>
@@ -1143,6 +1146,14 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                             <Season
                               tvId={data.id}
                               seasonNumber={season.seasonNumber}
+                              mediaId={
+                                seasonHolders(
+                                  versionFiles?.versions,
+                                  season.seasonNumber
+                                ).some((holder) => holder.key !== 'standard')
+                                  ? data.mediaInfo?.id
+                                  : undefined
+                              }
                             />
                           </DisclosurePanel>
                         </Transition>

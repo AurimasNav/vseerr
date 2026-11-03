@@ -38,6 +38,8 @@ export interface VersionDetails {
   summary?: VersionFileSummary;
   /** Show: per season. */
   seasonSummaries?: Record<number, VersionFileSummary>;
+  /** Show: the episode numbers this version has a file for, per season. */
+  seasonEpisodes?: Record<number, number[]>;
   coverage: VersionCoverageResult;
 }
 
@@ -45,7 +47,20 @@ export interface MediaVersionsResponse {
   versions: VersionDetails[];
 }
 
+/** One version's file of an episode. */
+export interface EpisodeVersion {
+  key: CoverageKey;
+  label?: string;
+  summary: VersionFileSummary;
+}
+
+export interface SeasonEpisodeVersionsResponse {
+  /** Episodes at least one version has a file for, in episode order. */
+  episodes: { episodeNumber: number; versions: EpisodeVersion[] }[];
+}
+
 interface ArrFile {
+  id?: number;
   seasonNumber?: number;
   quality?: { quality?: { resolution?: number } };
   customFormats?: { id: number; name: string }[];
@@ -69,6 +84,13 @@ interface CustomFormat {
   id: number;
   name: string;
   specifications?: ArrFormatSpec[];
+}
+
+interface ArrEpisode {
+  seasonNumber: number;
+  episodeNumber: number;
+  hasFile?: boolean;
+  episodeFileId?: number;
 }
 
 type ArrProfile = QualityProfile & {
@@ -119,6 +141,14 @@ class CoverageClient extends ServarrBase<Record<string, never>> {
   public async episodeFiles(seriesId: number): Promise<ArrFile[]> {
     return this.get<ArrFile[]>(
       '/episodefile',
+      { params: { seriesId } },
+      CACHE_TTL
+    );
+  }
+
+  public async episodes(seriesId: number): Promise<ArrEpisode[]> {
+    return this.get<ArrEpisode[]>(
+      '/episode',
       { params: { seriesId } },
       CACHE_TTL
     );
@@ -265,14 +295,30 @@ const openRequests = (media: Media, version: VersionServer) =>
 const newest = (dates: Date[]): Date | null =>
   dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null;
 
+/** Episode numbers with a file, per season, in episode order. */
+const episodesBySeason = (episodes: ArrEpisode[]): Record<number, number[]> => {
+  const bySeason: Record<number, number[]> = {};
+  for (const episode of episodes) {
+    if (episode.hasFile) {
+      (bySeason[episode.seasonNumber] ??= []).push(episode.episodeNumber);
+    }
+  }
+  for (const list of Object.values(bySeason)) {
+    list.sort((a, b) => a - b);
+  }
+  return bySeason;
+};
+
 /**
  * Per-version file summaries and coverage for a title. Versions whose
  * instance cannot be reached are listed without a summary and never cover
- * anything.
+ * anything. With `withEpisodes`, a show's versions also list the episodes
+ * they hold, so a season split across versions can be shown as such.
  */
 export const getMediaVersions = async (
   media: Media,
-  now = new Date()
+  now = new Date(),
+  { withEpisodes = false }: { withEpisodes?: boolean } = {}
 ): Promise<MediaVersionsResponse> => {
   const type = media.mediaType === MediaType.MOVIE ? 'radarr' : 'sonarr';
   const servers = versionServers(type, media);
@@ -297,6 +343,7 @@ export const getMediaVersions = async (
       );
       let summary: VersionFileSummary | undefined;
       let seasonSummaries: Record<number, VersionFileSummary> | undefined;
+      let seasonEpisodes: Record<number, number[]> | undefined;
 
       try {
         const client = clientFor(version.server, type);
@@ -377,6 +424,11 @@ export const getMediaVersions = async (
                 summarizeFiles(list.map(toInputFile), options),
               ])
             );
+            if (withEpisodes) {
+              seasonEpisodes = episodesBySeason(
+                await client.episodes(series.id)
+              );
+            }
           }
         }
       } catch (e) {
@@ -390,7 +442,7 @@ export const getMediaVersions = async (
         input.seasonFiles = undefined;
       }
 
-      return { version, input, summary, seasonSummaries };
+      return { version, input, summary, seasonSummaries, seasonEpisodes };
     })
   );
 
@@ -400,14 +452,107 @@ export const getMediaVersions = async (
   );
 
   return {
-    versions: gathered.map(({ version, summary, seasonSummaries }, i) => ({
-      key: version.key,
-      label: version.label,
-      serverId: version.serverId,
-      summary,
-      seasonSummaries,
-      coverage: coverage[i],
-    })),
+    versions: gathered.map(
+      ({ version, summary, seasonSummaries, seasonEpisodes }, i) => ({
+        key: version.key,
+        label: version.label,
+        serverId: version.serverId,
+        summary,
+        seasonSummaries,
+        seasonEpisodes,
+        coverage: coverage[i],
+      })
+    ),
+  };
+};
+
+/**
+ * Which versions hold each episode of a season, with what each file
+ * contains. A version whose instance cannot be reached is left out.
+ */
+export const getSeasonEpisodeVersions = async (
+  media: Media,
+  seasonNumber: number
+): Promise<SeasonEpisodeVersionsResponse> => {
+  const tvdbId = media.tvdbId;
+  if (media.mediaType !== MediaType.TV || !tvdbId) {
+    return { episodes: [] };
+  }
+  const servers = versionServers('sonarr', media);
+  if (servers.length < 2) {
+    return { episodes: [] };
+  }
+
+  const perVersion = await Promise.all(
+    servers.map(async (version) => {
+      try {
+        const client = clientFor(version.server, 'sonarr');
+        const series = await client.seriesByTvdbId(tvdbId);
+        if (!series) {
+          return [];
+        }
+        const [formats, profiles, files, episodes] = await Promise.all([
+          client.customFormats(),
+          client.profiles(),
+          client.episodeFiles(series.id),
+          client.episodes(series.id),
+        ]);
+        const seasonFiles = files.filter(
+          (file) => (file.seasonNumber ?? 0) === seasonNumber
+        );
+        const profile = profiles.find((p) => p.id === series.qualityProfileId);
+        const options = {
+          ...displayOptions(profile, formats, seasonFiles),
+          originalLanguage: series.originalLanguage?.name,
+        };
+        const filesById = new Map(
+          seasonFiles
+            .filter((file) => file.id != null)
+            .map((file) => [file.id, file])
+        );
+        return episodes
+          .filter((e) => e.seasonNumber === seasonNumber && e.hasFile)
+          .flatMap((episode) => {
+            const file = filesById.get(episode.episodeFileId);
+            return file
+              ? [
+                  {
+                    episodeNumber: episode.episodeNumber,
+                    version: {
+                      key: version.key,
+                      label: version.label,
+                      summary: summarizeFiles([toInputFile(file)], options),
+                    },
+                  },
+                ]
+              : [];
+          });
+      } catch (e) {
+        logger.warn('Could not read version episodes', {
+          label: 'Versions',
+          version: version.key,
+          mediaId: media.id,
+          seasonNumber,
+          errorMessage: e.message,
+        });
+        return [];
+      }
+    })
+  );
+
+  const byEpisode = new Map<number, EpisodeVersion[]>();
+  for (const entries of perVersion) {
+    for (const { episodeNumber, version } of entries) {
+      byEpisode.set(episodeNumber, [
+        ...(byEpisode.get(episodeNumber) ?? []),
+        version,
+      ]);
+    }
+  }
+  return {
+    episodes: [...byEpisode.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([episodeNumber, versions]) => ({ episodeNumber, versions })),
   };
 };
 
