@@ -30,7 +30,7 @@ Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VS
 
 In Plex, add each version's media folder to the same library. Plex then shows the title once and lets viewers pick the version when playing.
 
-Everything else is Seerr as released upstream.
+Everything else is Seerr as released upstream, apart from earlier dependency fixes (see [How it relates to Seerr](#how-it-relates-to-seerr)).
 
 ## Screenshots
 
@@ -68,6 +68,7 @@ VSeerr and Seerr can share one database. VSeerr keeps its data in tables of its 
 
 - **Built on Seerr releases.** Each new Seerr release is merged in. A scheduled check tests every new release against VSeerr and opens an issue with the result.
 - **Small, separate changes.** Version code lives in new files where possible, with only small hooks into existing Seerr code. This keeps upstream merges simple.
+- **Dependency fixes ahead of Seerr.** When a high or critical vulnerability in the published image has a fix, VSeerr applies it without waiting for the next Seerr release, using Seerr's own fix when there is one. The image also leaves out npm, yarn and corepack, which the app does not use.
 - **Not sent upstream.** Seerr does not accept AI-driven contributions, and VSeerr respects that. Code from this repository is not proposed to Seerr.
 - **Seerr's documentation applies.** Setup, configuration and troubleshooting follow the [Seerr documentation](https://docs.seerr.dev). VSeerr documents only what it adds.
 
