@@ -216,7 +216,10 @@
       "sqlite3>node-gyp": "8.4.1",
       "@types/express-session": "1.18.2",
       "@types/react": "19.2.14",
-      "@types/react-dom": "19.2.3"
+      "@types/react-dom": "19.2.3",
+      "email-templates>nodemailer": "^10.2.1",
+      "mailparser>nodemailer": "^10.2.1",
+      "preview-email>nodemailer": "^10.2.1"
     }
   },
   "scarfSettings": {
