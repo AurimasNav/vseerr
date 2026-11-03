@@ -54,7 +54,9 @@ Each version shows who has already requested it. The user picks a version, ticks
 
 ## Installing
 
-Images are published to the GitHub Container Registry as `ghcr.io/aurimasnav/vseerr`, tagged `<Seerr version>-vseerr.<VSeerr version>`, for example `3.5.1-vseerr.2.118.0`. The first part is the Seerr release the image is based on; the second is VSeerr's own version (major.minor.patch), which goes up with every change. Both are [semantic versions](https://semver.org/), so tools such as Renovate can follow them. The `main` tag follows the latest build. Images are built for amd64 only.
+Images are published to the GitHub Container Registry as `ghcr.io/aurimasnav/vseerr`, tagged `<Seerr version>-vseerr.<VSeerr version>`, for example `3.5.1-vseerr.2.118.0`. The first part is the Seerr release the image is based on; the second is VSeerr's own version (major.minor.patch), which goes up with every change. Both are [semantic versions](https://semver.org/), so tools such as Renovate can follow them. The `main` tag follows the latest build. Images are built for amd64 and arm64.
+
+VSeerr has only been run with Plex on amd64. Jellyfin, Emby and arm64 are untested: CI builds and starts the arm64 image on every change, but it has not run on arm64 hardware. Reports from either are welcome in the [issues](https://github.com/AurimasNav/vseerr/issues).
 
 Images published before 3.5.1-vseerr.2.118.0 were tagged with a build number instead, for example `3.5.1-vseerr.32`. They sort above the new tags, so if a tool follows the tags, start it from the new ones.
 
