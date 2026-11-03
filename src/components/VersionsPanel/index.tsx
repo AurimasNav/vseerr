@@ -3,7 +3,8 @@ import { getStatusLabel } from '@app/components/StatusBadge';
 import VersionFileDetails from '@app/components/VersionsPanel/VersionFileDetails';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
-import { getLabelledServices } from '@app/utils/serviceRequestStatus';
+import { isSlotRequest } from '@app/utils/serviceRequestStatus';
+import { versionSlots } from '@app/utils/versionChoices';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
@@ -47,31 +48,14 @@ const VersionsPanel = ({
   const intl = useIntl();
   const { user } = useUser();
 
-  const versions = getLabelledServices(services).filter(
-    (service) => !service.animeOnly || isAnime
-  );
+  const slots = versionSlots(mediaType, services, isAnime);
+  const hasVersions = slots.some((slot) => slot.serverId !== undefined);
   // File details and coverage, read from Radarr/Sonarr by the server.
   const { data: fileDetails } = useSWR<MediaVersionsResponse>(
-    versions.length > 0 && media?.id
-      ? `/api/v1/media/${media.id}/versions`
-      : null
+    hasVersions && media?.id ? `/api/v1/media/${media.id}/versions` : null
   );
-  const detailsFor = (key: string) =>
-    fileDetails?.versions.find((v) => v.key === key);
-  const standardDetails = detailsFor('standard');
-  const standardRequests = (media?.requests ?? [])
-    .filter(
-      (request) =>
-        !request.isServiceRequest &&
-        !request.is4k &&
-        ACTIVE_REQUEST_STATUSES.includes(request.status)
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
 
-  if (versions.length === 0) {
+  if (!hasVersions) {
     return null;
   }
 
@@ -123,15 +107,12 @@ const VersionsPanel = ({
     );
   };
 
-  const rows = versions.map((version) => {
-    const serviceStatus = media?.serviceStatuses?.find(
-      (status) => status.serviceId === version.id
-    );
+  const rows = slots.map((slot) => {
+    const details = fileDetails?.versions.find((v) => v.key === slot.key);
     const requests = (media?.requests ?? [])
       .filter(
         (request) =>
-          request.isServiceRequest &&
-          request.serverId === version.id &&
+          isSlotRequest(request, slot.serverId) &&
           ACTIVE_REQUEST_STATUSES.includes(request.status)
       )
       .sort(
@@ -139,7 +120,21 @@ const VersionsPanel = ({
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
 
-    let status = serviceStatus?.status ?? MediaStatus.UNKNOWN;
+    // Standard's status is Seerr's own badge at the top of the page, so
+    // its row only lists files and requesters, and only when it has some.
+    if (slot.serverId === undefined) {
+      const hasContent =
+        !!details?.summary ||
+        !!details?.coverage.coveredBy ||
+        !!details?.coverage.requestedVia ||
+        !!details?.coverage.seasons ||
+        requests.length > 0;
+      return { slot, details, requests, hasContent, status: undefined };
+    }
+
+    let status =
+      media?.serviceStatuses?.find((s) => s.serviceId === slot.serverId)
+        ?.status ?? MediaStatus.UNKNOWN;
     if (
       (status === MediaStatus.UNKNOWN || status === MediaStatus.DELETED) &&
       requests.length > 0
@@ -149,7 +144,7 @@ const VersionsPanel = ({
         : MediaStatus.PROCESSING;
     }
 
-    return { version, status, requests };
+    return { slot, details, requests, hasContent: true, status };
   });
 
   return (
@@ -157,45 +152,28 @@ const VersionsPanel = ({
       <div className="media-fact">
         <span>{intl.formatMessage(messages.versions)}</span>
       </div>
-      {(standardDetails?.summary ||
-        standardDetails?.coverage.coveredBy ||
-        standardDetails?.coverage.requestedVia ||
-        standardDetails?.coverage.seasons ||
-        standardRequests.length > 0) && (
-        <div className="media-fact flex-col items-stretch">
-          <div className="flex justify-between">
-            <span>{intl.formatMessage(messages.standard)}</span>
-          </div>
-          <VersionFileDetails details={standardDetails} />
-          {requestedByLine(standardRequests)}
-        </div>
-      )}
-      {rows.map(({ version, status, requests }) => {
-        const isRequested =
-          status !== MediaStatus.UNKNOWN && status !== MediaStatus.DELETED;
-
-        return (
+      {rows
+        .filter(({ hasContent }) => hasContent)
+        .map(({ slot, details, requests, status }) => (
           <div
-            key={`version-${version.id}`}
+            key={`version-${slot.key}`}
             className="media-fact flex-col items-stretch"
           >
             <div className="flex justify-between">
-              <span>{version.buttonLabel}</span>
-              <span className="media-fact-value">
-                {isRequested
-                  ? getStatusLabel(intl, status)
-                  : intl.formatMessage(messages.notrequested)}
-              </span>
-            </div>
-            <VersionFileDetails
-              details={detailsFor(
-                `${mediaType === 'tv' ? 'sonarr' : 'radarr'}:${version.id}`
+              <span>{slot.label ?? intl.formatMessage(messages.standard)}</span>
+              {status !== undefined && (
+                <span className="media-fact-value">
+                  {status !== MediaStatus.UNKNOWN &&
+                  status !== MediaStatus.DELETED
+                    ? getStatusLabel(intl, status)
+                    : intl.formatMessage(messages.notrequested)}
+                </span>
               )}
-            />
+            </div>
+            <VersionFileDetails details={details} />
             {requestedByLine(requests)}
           </div>
-        );
-      })}
+        ))}
     </div>
   );
 };

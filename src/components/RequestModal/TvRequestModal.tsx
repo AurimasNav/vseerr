@@ -15,6 +15,11 @@ import useVersionChoice from '@app/hooks/useVersionChoice';
 import globalMessages from '@app/i18n/globalMessages';
 import { advancedDefaults } from '@app/utils/advancedDefaults';
 import defineMessages from '@app/utils/defineMessages';
+import {
+  getSlotSeasonStatus,
+  isSlotRequest,
+} from '@app/utils/serviceRequestStatus';
+import { versionKey } from '@app/utils/versionChoices';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
@@ -117,10 +122,9 @@ const TvRequestModal = ({
 
   // VSeerr: seasons another version covers (or may cover, while its request
   // is under a day old). Users without Manage Requests can't request them.
-  const versionKey =
-    requestServerId != null ? `sonarr:${requestServerId}` : 'standard';
+  const slotKey = versionKey('tv', requestServerId);
   const seasonCoverage =
-    version.coverage.find((c) => c.key === versionKey)?.seasons ?? {};
+    version.coverage.find((c) => c.key === slotKey)?.seasons ?? {};
   const isCoverageClosed = (seasonNumber: number) =>
     !hasPermission(Permission.MANAGE_REQUESTS) &&
     !!(
@@ -129,20 +133,12 @@ const TvRequestModal = ({
     );
 
   // Requests and season statuses of the version being requested.
-  const isSlotRequest = (request: NonFunctionProperties<MediaRequest>) =>
-    requestServerId != null
-      ? request.isServiceRequest && request.serverId === requestServerId
-      : !request.isServiceRequest && request.is4k === is4k;
-  const getSlotSeasonStatus = (
+  const isRequestInSlot = (request: NonFunctionProperties<MediaRequest>) =>
+    isSlotRequest(request, requestServerId, is4k);
+  const getSeasonStatusInSlot = (
     seasonNumber: number
   ): MediaStatus | undefined =>
-    requestServerId != null
-      ? data?.mediaInfo?.serviceStatuses?.find(
-          (serviceStatus) => serviceStatus.serviceId === requestServerId
-        )?.seasonStatuses?.[seasonNumber]
-      : data?.mediaInfo?.seasons.find(
-          (season) => season.seasonNumber === seasonNumber
-        )?.[is4k ? 'status4k' : 'status'];
+    getSlotSeasonStatus(data?.mediaInfo, requestServerId, seasonNumber, is4k);
 
   const currentlyRemaining =
     (quota?.tv.remaining ?? 0) -
@@ -310,7 +306,7 @@ const TvRequestModal = ({
     const requestedSeasons = (data?.mediaInfo?.requests ?? [])
       .filter(
         (request) =>
-          isSlotRequest(request) &&
+          isRequestInSlot(request) &&
           request.status !== MediaRequestStatus.DECLINED &&
           request.status !== MediaRequestStatus.COMPLETED
       )
@@ -324,7 +320,7 @@ const TvRequestModal = ({
       }, [] as number[]);
 
     const availableSeasons = getAllSeasons().filter((seasonNumber) => {
-      const status = getSlotSeasonStatus(seasonNumber);
+      const status = getSeasonStatusInSlot(seasonNumber);
       return (
         (status === MediaStatus.AVAILABLE ||
           status === MediaStatus.PARTIALLY_AVAILABLE ||
@@ -415,7 +411,7 @@ const TvRequestModal = ({
       data?.mediaInfo &&
       (data.mediaInfo.requests || []).filter(
         (request) =>
-          isSlotRequest(request) &&
+          isRequestInSlot(request) &&
           request.status !== MediaRequestStatus.DECLINED &&
           request.status !== MediaRequestStatus.COMPLETED
       ).length > 0
@@ -423,7 +419,7 @@ const TvRequestModal = ({
       data.mediaInfo.requests
         .filter(
           (request) =>
-            isSlotRequest(request) &&
+            isRequestInSlot(request) &&
             request.status !== MediaRequestStatus.DECLINED &&
             request.status !== MediaRequestStatus.COMPLETED
         )
@@ -658,7 +654,7 @@ const TvRequestModal = ({
                       const seasonRequest = getSeasonRequest(
                         season.seasonNumber
                       );
-                      const slotStatus = getSlotSeasonStatus(
+                      const slotStatus = getSeasonStatusInSlot(
                         season.seasonNumber
                       );
                       const mediaSeason =
