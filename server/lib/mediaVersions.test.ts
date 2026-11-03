@@ -7,7 +7,11 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import cacheManager from '@server/lib/cache';
-import { coverageBlock, getMediaVersions } from '@server/lib/mediaVersions';
+import {
+  coverageBlock,
+  getMediaVersions,
+  getSeasonEpisodeVersions,
+} from '@server/lib/mediaVersions';
 import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
@@ -385,5 +389,168 @@ describe('coverageBlock (shows)', () => {
       isServiceRequest: true,
     });
     assert.deepStrictEqual(block?.seasons, [1]);
+  });
+});
+
+describe('version episodes (shows)', () => {
+  const sonarr = (id: number, hostname: string, buttonLabel?: string) =>
+    ({
+      id,
+      name: hostname,
+      hostname,
+      port: 8989,
+      apiKey: 'key',
+      useSsl: false,
+      activeProfileId: 1,
+      activeProfileName: 'Any',
+      activeDirectory: '/tv',
+      activeLanguageProfileId: 1,
+      is4k: false,
+      enableSeasonFolders: true,
+      isDefault: id === 0,
+      syncEnabled: true,
+      preventSearch: false,
+      tags: [],
+      animeTags: [],
+      ...(buttonLabel ? { buttonLabel } : {}),
+    }) as unknown as SonarrSettings;
+
+  // Episode files: [season, episode, format ids, languages]; one file each.
+  const hasSeries = (
+    host: string,
+    files: [number, number, number[], string[]][]
+  ) => {
+    hosts[host] = {
+      '/series': [
+        {
+          id: 3,
+          qualityProfileId: 1,
+          originalLanguage: { id: 1, name: 'English' },
+          seasons: [],
+        },
+      ],
+      '/episodefile': files.map(([season, , formatIds, languages], i) => ({
+        id: 100 + i,
+        seasonNumber: season,
+        ...movieFile(formatIds, languages),
+      })),
+      '/episode': [
+        ...files.map(([season, episode], i) => ({
+          seasonNumber: season,
+          episodeNumber: episode,
+          hasFile: true,
+          episodeFileId: 100 + i,
+        })),
+        { seasonNumber: 1, episodeNumber: 9, hasFile: false, episodeFileId: 0 },
+      ],
+    };
+  };
+
+  const seedShow = () =>
+    getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.TV,
+        tmdbId: 95480,
+        tvdbId: 372264,
+        serviceId: 0,
+      })
+    );
+
+  beforeEach(() => {
+    getSettings().sonarr = [
+      sonarr(0, 'sonarr'),
+      sonarr(1, 'sonarr-ru', 'Russian'),
+      sonarr(2, 'sonarr-lt', 'Lithuanian'),
+    ];
+    // Season 1 is split: Standard has 1-2, Russian has 2-3. Russian also
+    // has season 2, which Standard lacks.
+    hasSeries('sonarr', [
+      [1, 1, [1], ['English']],
+      [1, 2, [1], ['English']],
+    ]);
+    hasSeries('sonarr-ru', [
+      [1, 2, [2], ['English', 'Russian']],
+      [1, 3, [2], ['English', 'Russian']],
+      [2, 1, [2], ['English', 'Russian']],
+    ]);
+  });
+
+  it('lists the episodes each version holds, per season', async () => {
+    const media = await seedShow();
+
+    const { versions } = await getMediaVersions(media, new Date(), {
+      withEpisodes: true,
+    });
+
+    assert.deepStrictEqual(
+      versions.map((v) => [v.key, v.seasonEpisodes]),
+      [
+        ['standard', { 1: [1, 2] }],
+        ['sonarr:1', { 1: [2, 3], 2: [1] }],
+        ['sonarr:2', undefined],
+      ]
+    );
+  });
+
+  it('leaves the episodes out unless asked', async () => {
+    const media = await seedShow();
+
+    const { versions } = await getMediaVersions(media);
+
+    assert.ok(versions.every((v) => v.seasonEpisodes === undefined));
+  });
+
+  it('lists the versions holding each episode with their file details', async () => {
+    const media = await seedShow();
+
+    const { episodes } = await getSeasonEpisodeVersions(media, 1);
+
+    assert.deepStrictEqual(
+      episodes.map((e) => [e.episodeNumber, e.versions.map((v) => v.key)]),
+      [
+        [1, ['standard']],
+        [2, ['standard', 'sonarr:1']],
+        [3, ['sonarr:1']],
+      ]
+    );
+    const russian = episodes[1].versions[1];
+    assert.strictEqual(russian.label, 'Russian');
+    assert.deepStrictEqual(russian.summary.resolutions, ['2160p']);
+    assert.deepStrictEqual(
+      russian.summary.formats.map((f) => f.name),
+      ['Russian audio']
+    );
+    assert.deepStrictEqual(
+      russian.summary.languages.map((l) => l.name),
+      ['English', 'Russian']
+    );
+    assert.deepStrictEqual(
+      episodes[0].versions[0].summary.formats.map((f) => f.name),
+      ['REMUX']
+    );
+  });
+
+  it('leaves out a version that cannot be read', async () => {
+    (hosts['sonarr-ru'] as Record<string, unknown>)['/episode'] = null;
+    const media = await seedShow();
+
+    const { episodes } = await getSeasonEpisodeVersions(media, 1);
+
+    assert.deepStrictEqual(
+      episodes.map((e) => [e.episodeNumber, e.versions.map((v) => v.key)]),
+      [
+        [1, ['standard']],
+        [2, ['standard']],
+      ]
+    );
+  });
+
+  it('returns no episodes without versions', async () => {
+    getSettings().sonarr = [sonarr(0, 'sonarr')];
+    const media = await seedShow();
+
+    assert.deepStrictEqual(await getSeasonEpisodeVersions(media, 1), {
+      episodes: [],
+    });
   });
 });

@@ -13,7 +13,10 @@ import type {
   MediaResultsResponse,
   MediaWatchDataResponse,
 } from '@server/interfaces/api/mediaInterfaces';
-import { getMediaVersions } from '@server/lib/mediaVersions';
+import {
+  getMediaVersions,
+  getSeasonEpisodeVersions,
+} from '@server/lib/mediaVersions';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { isVersionRequestSql } from '@server/lib/versionSql';
@@ -375,7 +378,9 @@ mediaRoutes.get<{ id: string }>('/:id/versions', async (req, res, next) => {
   }
 
   try {
-    return res.status(200).json(await getMediaVersions(media));
+    return res
+      .status(200)
+      .json(await getMediaVersions(media, new Date(), { withEpisodes: true }));
   } catch (e) {
     logger.error('Failed to read media versions', {
       label: 'Media',
@@ -385,6 +390,39 @@ mediaRoutes.get<{ id: string }>('/:id/versions', async (req, res, next) => {
     return next({ status: 500, message: 'Failed to read media versions.' });
   }
 });
+
+// VSeerr: which versions hold each episode of a season, and what each file
+// contains. Same audience as /versions.
+mediaRoutes.get<{ id: string; seasonNumber: string }>(
+  '/:id/versions/season/:seasonNumber',
+  async (req, res, next) => {
+    const seasonNumber = Number(req.params.seasonNumber);
+    if (!Number.isInteger(seasonNumber) || seasonNumber < 0) {
+      return next({ status: 400, message: 'Invalid season number.' });
+    }
+    const media = await getRepository(Media).findOne({
+      where: { id: Number(req.params.id) },
+    });
+
+    if (!media) {
+      return next({ status: 404, message: 'Media does not exist.' });
+    }
+
+    try {
+      return res
+        .status(200)
+        .json(await getSeasonEpisodeVersions(media, seasonNumber));
+    } catch (e) {
+      logger.error('Failed to read season versions', {
+        label: 'Media',
+        mediaId: media.id,
+        seasonNumber,
+        errorMessage: e.message,
+      });
+      return next({ status: 500, message: 'Failed to read season versions.' });
+    }
+  }
+);
 
 mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
   '/:id/watch_data',

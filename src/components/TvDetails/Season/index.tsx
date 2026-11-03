@@ -1,7 +1,9 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import EpisodeVersions from '@app/components/TvDetails/Season/EpisodeVersions';
 import defineMessages from '@app/utils/defineMessages';
+import type { SeasonEpisodeVersionsResponse } from '@server/lib/mediaVersions';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -14,12 +16,18 @@ const messages = defineMessages('components.TvDetails.Season', {
 type SeasonProps = {
   seasonNumber: number;
   tvId: number;
+  /** VSeerr: set when a version holds files in this season. */
+  mediaId?: number;
 };
 
-const Season = ({ seasonNumber, tvId }: SeasonProps) => {
+const Season = ({ seasonNumber, tvId, mediaId }: SeasonProps) => {
   const intl = useIntl();
   const { data, error } = useSWR<SeasonWithEpisodes>(
     `/api/v1/tv/${tvId}/season/${seasonNumber}`
+  );
+  // VSeerr: which versions hold each episode, and what each file contains.
+  const { data: episodeVersions } = useSWR<SeasonEpisodeVersionsResponse>(
+    mediaId ? `/api/v1/media/${mediaId}/versions/season/${seasonNumber}` : null
   );
 
   if (!data && !error) {
@@ -53,6 +61,13 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                       <AirDateBadge airDate={episode.airDate} />
                     )}
                   </div>
+                  <EpisodeVersions
+                    versions={
+                      episodeVersions?.episodes.find(
+                        (e) => e.episodeNumber === episode.episodeNumber
+                      )?.versions
+                    }
+                  />
                   {episode.overview && <p>{episode.overview}</p>}
                 </div>
                 {episode.stillPath && (

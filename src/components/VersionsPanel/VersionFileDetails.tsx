@@ -58,11 +58,19 @@ const Check = ({
   );
 };
 
-const SummaryChecks = ({ summary }: { summary: VersionFileSummary }) => {
+export const SummaryChecks = ({
+  summary,
+  align = 'end',
+}: {
+  summary: VersionFileSummary;
+  align?: 'start' | 'end';
+}) => {
   const intl = useIntl();
   return (
     <div
-      className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5 text-xs font-normal"
+      className={`flex flex-wrap ${
+        align === 'end' ? 'mt-1 justify-end' : 'justify-start'
+      } gap-x-2 gap-y-0.5 text-xs font-normal`}
       data-testid="version-file-checks"
     >
       {summary.resolutions.map((resolution) => (

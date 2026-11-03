@@ -103,6 +103,59 @@ describe('getServiceStatusItems', () => {
 
     assert.deepStrictEqual(itemIds(items), [[0, MediaStatus.AVAILABLE]]);
   });
+
+  it('shows a version request for a season the version does not have yet', () => {
+    const seasonRequest = (
+      serverId: number,
+      status: MediaRequestStatus,
+      seasons: number[],
+      is4k = false
+    ) =>
+      ({
+        isServiceRequest: true,
+        serverId,
+        status,
+        is4k,
+        seasons: seasons.map((seasonNumber) => ({ seasonNumber })),
+      }) as unknown as MediaRequest;
+
+    const items = getServiceStatusItems({
+      services: [
+        server(0, { buttonLabel: 'ITA' }),
+        server(1, { buttonLabel: 'ENG' }),
+        server(2, { buttonLabel: 'GER' }),
+      ],
+      serviceStatuses: [
+        serviceStatus(0, MediaStatus.PARTIALLY_AVAILABLE, {
+          1: MediaStatus.AVAILABLE,
+        }),
+      ],
+      requests: [
+        seasonRequest(0, MediaRequestStatus.APPROVED, [2]),
+        seasonRequest(1, MediaRequestStatus.APPROVED, [2]),
+        seasonRequest(2, MediaRequestStatus.PENDING, [2, 3]),
+        seasonRequest(2, MediaRequestStatus.COMPLETED, [1]),
+        seasonRequest(1, MediaRequestStatus.PENDING, [1], true),
+      ],
+      seasonNumber: 2,
+    });
+
+    assert.deepStrictEqual(itemIds(items), [
+      [0, MediaStatus.PROCESSING],
+      [1, MediaStatus.PROCESSING],
+      [2, MediaStatus.PENDING],
+    ]);
+    assert.deepStrictEqual(
+      itemIds(
+        getServiceStatusItems({
+          services: [server(1, { buttonLabel: 'ENG' })],
+          requests: [seasonRequest(1, MediaRequestStatus.PENDING, [1], true)],
+          seasonNumber: 1,
+        })
+      ),
+      []
+    );
+  });
 });
 
 describe('standard status coverage', () => {

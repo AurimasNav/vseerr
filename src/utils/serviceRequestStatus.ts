@@ -64,6 +64,32 @@ export const getServiceStatusItems = ({
         items.push({ server, status: MediaStatus.PENDING, downloadItem: [] });
       }
     }
+  } else {
+    // A season the scan hasn't seen in the version yet: show the version's
+    // open request for it.
+    for (const request of requests ?? []) {
+      const status =
+        request.status === MediaRequestStatus.PENDING
+          ? MediaStatus.PENDING
+          : request.status === MediaRequestStatus.APPROVED
+            ? MediaStatus.PROCESSING
+            : undefined;
+      if (
+        !request.isServiceRequest ||
+        request.is4k ||
+        status === undefined ||
+        !(request.seasons ?? []).some(
+          (season) => season.seasonNumber === seasonNumber
+        ) ||
+        items.some(({ server }) => server.id === request.serverId)
+      ) {
+        continue;
+      }
+      const server = labelledServices.find((s) => s.id === request.serverId);
+      if (server) {
+        items.push({ server, status, downloadItem: [] });
+      }
+    }
   }
 
   return items;

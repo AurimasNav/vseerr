@@ -592,3 +592,46 @@ describe('DELETE /media/:id/file', () => {
     });
   });
 });
+
+describe('GET /media/:id/versions/season/:seasonNumber', () => {
+  async function seedShow() {
+    return getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.TV,
+        tmdbId: 95480,
+        tvdbId: TVDB_ID,
+        status: MediaStatus.UNKNOWN,
+      })
+    );
+  }
+
+  it('answers any signed-in user', async () => {
+    configureSonarr([{ hostname: 'sonarr', isDefault: true }]);
+    const media = await seedShow();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(`/api/v1/media/${media.id}/versions/season/1`);
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, { episodes: [] });
+  });
+
+  it('rejects a season number that is not a number', async () => {
+    const media = await seedShow();
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get(
+      `/api/v1/media/${media.id}/versions/season/first`
+    );
+
+    assert.strictEqual(res.status, 400);
+  });
+
+  it('returns 404 for unknown media', async () => {
+    const agent = await loginAs('demo@seerr.dev');
+
+    const res = await agent.get('/api/v1/media/9999/versions/season/1');
+
+    assert.strictEqual(res.status, 404);
+  });
+});
