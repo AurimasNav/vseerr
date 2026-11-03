@@ -6,7 +6,7 @@ export default defineConfig({
     baseUrl: 'http://localhost:5055',
     video: true,
   },
-  env: {
+  expose: {
     ADMIN_EMAIL: 'admin@seerr.dev',
     ADMIN_PASSWORD: 'test1234',
     USER_EMAIL: 'demo@seerr.dev',

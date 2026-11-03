@@ -23,9 +23,12 @@
   suppressNotifications: ['prEditedNotification', 'prIgnoreNotification'],
   // Security-fix PRs come from GitHub's Dependabot alerts (enabled on this
   // repository) and from OSV. They override the rules below, skip schedules,
-  // and are raised without waiting for the release to age.
+  // and are raised without waiting for the release to age. They come as one
+  // PR: every merge to main builds and deploys an image, and separate PRs
+  // would each need a rebase after the previous one is merged.
   vulnerabilityAlerts: {
     enabled: true,
+    groupName: 'security fixes',
     labels: ['dependencies', 'security'],
     minimumReleaseAge: null,
   },
