@@ -10,6 +10,12 @@
 # push to main and daily, and are fixed through Renovate security PRs and
 # Seerr releases.
 #
+# The scans above read the repository's lockfiles, including tools that are
+# not in the image (gen-docs, bin/duplicate-detector). The published image is
+# scanned daily as well: its system packages and the Node.js packages it
+# ships, which is what actually runs. Pull requests that change the image are
+# scanned in vseerr-image.yml.
+#
 # Trivy and Gitleaks are downloaded as release binaries and verified against
 # their published checksums instead of using third-party actions.
 name: 'VSeerr Security'
@@ -159,6 +165,64 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
+
+  trivy-image-report:
+    name: Trivy (published image)
+    # The image of a push to main is still being built when this workflow
+    # starts, so the published image is scanned daily and on demand.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Trivy (checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" && cd "$(mktemp -d)"
+          tv="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL --retry 3 -o "$tv" "$base/$tv"
+          curl -fsSL --retry 3 -o sums "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $tv\$" sums | sha256sum -c -
+          tar xzf "$tv" -C "$HOME/bin" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Scan the published image
+        run: |
+          set -euo pipefail
+          # The latest build of main, which is what gets deployed.
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:main"
+          echo "image=$image" >> "$GITHUB_ENV"
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --format sarif --output trivy-image.sarif --quiet "$image"
+
+      - name: Summary
+        run: |
+          python3 - <<'EOF'
+          import json, os, collections
+          levels = collections.Counter()
+          for run in json.load(open("trivy-image.sarif"))["runs"]:
+              rules = {r["id"]: r for r in run["tool"]["driver"].get("rules", [])}
+              for res in run.get("results", []):
+                  tags = rules.get(res["ruleId"], {}).get("properties", {}).get("tags", [])
+                  levels[next((t for t in tags if t in ("CRITICAL", "HIGH")), "OTHER")] += 1
+          line = f"Fixable findings in {os.environ['image']}: critical {levels['CRITICAL']}, high {levels['HIGH']}."
+          print(line)
+          open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(line + " Details are in the Security tab.\n")
+          EOF
+
+      - name: Upload to GitHub code scanning
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
 
   gitleaks:
     name: Gitleaks (secrets in new commits)
