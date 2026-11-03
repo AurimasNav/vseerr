@@ -248,6 +248,56 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Runs the built image once: it has to start, answer, have no npm, and stop
+  # promptly when asked. No tokens: the image is the pull request's code.
+  start:
+    name: Image start
+    needs: image
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Download the image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image
+          path: ${{ runner.temp }}
+
+      - name: Start, check and stop the image
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          docker load --quiet --input (Join-Path $env:RUNNER_TEMP image.tar)
+          docker run --detach --name vseerr --publish 5055:5055 vseerr-scan | Out-Null
+          $ready = $false
+          foreach ($i in 1..90) {
+            if ((docker logs vseerr 2>&1) -match 'Server ready on port 5055') { $ready = $true; break }
+            if ((docker inspect --format '{{.State.Running}}' vseerr) -ne 'true') { break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) {
+            docker logs vseerr 2>&1 | Select-Object -Last 50
+            throw 'The app did not start.'
+          }
+          $status = Invoke-RestMethod http://localhost:5055/api/v1/status
+          "Started: Seerr $($status.version), commit $($status.commitTag)."
+
+          $PSNativeCommandUseErrorActionPreference = $false
+          docker exec vseerr sh -c 'for c in npm npx yarn yarnpkg corepack; do command -v "$c" && exit 1; done; exit 0'
+          $found = $LASTEXITCODE -ne 0
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($found) { throw 'npm, npx, yarn or corepack is still in the image.' }
+
+          # docker stop sends SIGTERM and waits up to 10 seconds before SIGKILL.
+          $watch = [Diagnostics.Stopwatch]::StartNew()
+          docker stop --time 10 vseerr | Out-Null
+          $seconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
+          $exitCode = docker inspect --format '{{.State.ExitCode}}' vseerr
+          "Stopped after $seconds s, exit code $exitCode."
+          if ($seconds -ge 9 -or $exitCode -eq '137') { throw 'The app ignored SIGTERM and was killed.' }
+          "Starts, answers on /api/v1/status, has no npm, and stops in $seconds s." >> $env:GITHUB_STEP_SUMMARY
+
   # A job of its own, without the publishing token: Trivy is a downloaded
   # binary.
   scan:

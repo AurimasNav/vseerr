@@ -58,6 +58,14 @@ ENV COMMIT_TAG=${COMMIT_TAG}
 
 RUN apk add --no-cache tzdata
 
+# VSeerr: the app runs on node alone. npm, npx, yarn and corepack come with the
+# Node image but are not used at runtime, and npm's own dependencies carry most
+# of the image's vulnerability findings. tini passes stop signals on to node,
+# which ignores them when it runs as process 1 (npm used to do this).
+RUN apk add --no-cache tini && \
+  rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* && \
+  rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+
 USER node:node
 
 WORKDIR /app
@@ -72,4 +80,7 @@ RUN touch config/DOCKER && \
 
 EXPOSE 5055
 
-CMD [ "npm", "start" ]
+# VSeerr: Seerr's "start" script without npm. server/vseerrImage.test.ts fails
+# when Seerr changes that script, so this line is updated with it.
+ENTRYPOINT [ "/sbin/tini", "--", "docker-entrypoint.sh" ]
+CMD [ "node", "dist/index.js" ]
