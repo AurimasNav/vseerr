@@ -17,6 +17,12 @@
 # build that was already published skips publishing. Pull requests that touch
 # the image, and manual runs on other branches, build it without publishing.
 #
+# Those unpublished builds are scanned with Trivy, which reads the image's
+# system packages and the Node.js packages it ships. The scan fails on a high
+# or critical vulnerability with a fix available that the published image of
+# the base commit does not have. The published image itself is scanned daily
+# by vseerr-security.yml, which reports to the Security tab.
+#
 # Each published image carries an SBOM and build provenance, and GitHub signs
 # an attestation for it. To check that an image was built here:
 #   gh attestation verify oci://ghcr.io/aurimasnav/vseerr:<tag> --repo AurimasNav/vseerr
@@ -39,6 +45,8 @@ permissions: {}
 env:
   # renovate: datasource=github-releases depName=GitTools/GitVersion
   GITVERSION_VERSION: '6.8.2'
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: '0.76.1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -200,6 +208,19 @@ jobs:
           cache-to: ${{ steps.published.outputs.publish == 'true' && format('type=registry,ref={0}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', steps.vars.outputs.image) || '' }}
           provenance: ${{ steps.published.outputs.publish == 'true' && 'mode=max' || 'false' }}
           sbom: ${{ steps.published.outputs.publish == 'true' }}
+          # Builds that are not published are saved for the image scan.
+          outputs: ${{ env.MAIN != 'true' && format('type=docker,name=vseerr-scan,dest={0}/image.tar', runner.temp) || '' }}
+
+      - name: Save the image for the scan
+        if: env.MAIN != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image
+          path: ${{ runner.temp }}/image.tar
+          if-no-files-found: error
+          retention-days: 1
+          # The layers are already compressed.
+          compression-level: 0
 
       - name: Sign the build attestation
         if: steps.published.outputs.publish == 'true'
@@ -226,3 +247,85 @@ jobs:
             echo "${TAGS}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # A job of its own, without the publishing token: Trivy is a downloaded
+  # binary.
+  scan:
+    name: Image scan (new vulnerabilities)
+    needs: image
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Download the image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image
+          path: ${{ runner.temp }}
+
+      - name: Install Trivy (checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin" && cd "$(mktemp -d)"
+          tv="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL --retry 3 -o "$tv" "$base/$tv"
+          curl -fsSL --retry 3 -o sums "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $tv\$" sums | sha256sum -c -
+          tar xzf "$tv" -C "$HOME/bin" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Scan the image and the published base image
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $scan = '--scanners', 'vuln', '--severity', 'HIGH,CRITICAL', '--ignore-unfixed', '--format', 'json', '--quiet'
+          trivy image @scan --output head.json --input (Join-Path $env:RUNNER_TEMP image.tar)
+          $image = "ghcr.io/$($env:GITHUB_REPOSITORY.ToLowerInvariant())"
+          # Each commit of main is published as sha-<short sha>.
+          $base = $env:BASE_SHA ? "${image}:sha-$($env:BASE_SHA.Substring(0, 7))" : "${image}:main"
+          try {
+            trivy image @scan --output base.json $base
+          } catch {
+            "::warning::Could not scan $base; comparing with ${image}:main instead."
+            $base = "${image}:main"
+            trivy image @scan --output base.json $base
+          }
+          "Compared with ``$base``." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Fail on vulnerabilities the base image does not have
+        shell: pwsh
+        run: |
+          # Keyed without the installed version, so a rebuild that still has an
+          # already-known vulnerability is not "new".
+          function Get-Finding([string] $Path) {
+            $findings = @{}
+            foreach ($result in @((Get-Content $Path -Raw | ConvertFrom-Json).Results)) {
+              foreach ($v in @($result.Vulnerabilities)) {
+                if ($null -ne $v) { $findings["$($result.Type)|$($v.PkgName)|$($v.VulnerabilityID)"] = $v }
+              }
+            }
+            return $findings
+          }
+          $base = Get-Finding base.json
+          $head = Get-Finding head.json
+          $new = @($head.Keys | Where-Object { -not $base.ContainsKey($_) } | Sort-Object)
+          if ($new.Count -eq 0) {
+            $line = "No new fixable high or critical vulnerabilities in the image ($($head.Count) inherited from the base image)."
+            $line
+            $line >> $env:GITHUB_STEP_SUMMARY
+            return
+          }
+          @('| Severity | Package | Installed | Fixed in | ID | Where |', '| --- | --- | --- | --- | --- | --- |') >> $env:GITHUB_STEP_SUMMARY
+          foreach ($key in $new) {
+            $v = $head[$key]
+            $where = $v.PkgPath ? $v.PkgPath : $key.Split('|')[0]
+            "::error::$($v.Severity) $($v.PkgName) $($v.InstalledVersion) -> $($v.FixedVersion) $($v.VulnerabilityID) ($where)"
+            "| $($v.Severity) | $($v.PkgName) | $($v.InstalledVersion) | $($v.FixedVersion) | $($v.VulnerabilityID) | $where |" >> $env:GITHUB_STEP_SUMMARY
+          }
+          "$($new.Count) new fixable high or critical vulnerabilities in the image."
+          exit 1
