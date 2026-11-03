@@ -1,3 +1,5 @@
+import type { MediaRequest } from '@server/entity/MediaRequest';
+import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { VersionDetails } from '@server/lib/mediaVersions';
 
 // VSeerr: which versions hold a season's episodes, for the season rows of a
@@ -57,3 +59,30 @@ export const episodeRanges = (episodes: number[]): string => {
   }
   return ranges.join(', ');
 };
+
+/**
+ * The newest request for a season in the standard version (or standard
+ * 4K). Version requests are left out: they have their own badges, and
+ * counting them showed a version's pending request as a standard "Pending".
+ */
+export const standardSeasonRequest = <
+  T extends Pick<
+    NonFunctionProperties<MediaRequest>,
+    'is4k' | 'isServiceRequest' | 'createdAt'
+  > & { seasons: { seasonNumber: number }[] },
+>(
+  requests: T[] | undefined,
+  seasonNumber: number,
+  is4k: boolean
+): T | undefined =>
+  (requests ?? [])
+    .filter(
+      (request) =>
+        !request.isServiceRequest &&
+        request.is4k === is4k &&
+        request.seasons.some((season) => season.seasonNumber === seasonNumber)
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];

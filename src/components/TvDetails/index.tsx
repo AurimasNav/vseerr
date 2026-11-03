@@ -38,7 +38,10 @@ import ErrorPage from '@app/pages/_error';
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
-import { seasonHolders } from '@app/utils/seasonVersions';
+import {
+  seasonHolders,
+  standardSeasonRequest,
+} from '@app/utils/seasonVersions';
 import {
   getLabelledServices,
   getServiceStatusItems,
@@ -887,30 +890,18 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   serviceStatuses: data.mediaInfo?.serviceStatuses,
                   seasonNumber: season.seasonNumber,
                 });
-                const request = (data.mediaInfo?.requests ?? [])
-                  .filter(
-                    (r) =>
-                      !!r.seasons.find(
-                        (s) => s.seasonNumber === season.seasonNumber
-                      ) && !r.is4k
-                  )
-                  .sort(
-                    (a, b) =>
-                      new Date(b.createdAt).getTime() -
-                      new Date(a.createdAt).getTime()
-                  )[0];
-                const request4k = (data.mediaInfo?.requests ?? [])
-                  .filter(
-                    (r) =>
-                      !!r.seasons.find(
-                        (s) => s.seasonNumber === season.seasonNumber
-                      ) && r.is4k
-                  )
-                  .sort(
-                    (a, b) =>
-                      new Date(b.createdAt).getTime() -
-                      new Date(a.createdAt).getTime()
-                  )[0];
+                // VSeerr: standard requests only; version requests have
+                // their own badges.
+                const request = standardSeasonRequest(
+                  data.mediaInfo?.requests,
+                  season.seasonNumber,
+                  false
+                );
+                const request4k = standardSeasonRequest(
+                  data.mediaInfo?.requests,
+                  season.seasonNumber,
+                  true
+                );
 
                 if (season.episodeCount === 0) {
                   return null;
