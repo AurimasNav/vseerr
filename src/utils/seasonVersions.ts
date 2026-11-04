@@ -27,6 +27,37 @@ export const seasonHolders = (
     }))
     .filter((holder) => holder.episodes.length > 0);
 
+/** Whether an episode has aired: its air date is before today (UTC). */
+export const hasAired = (
+  airDate: string | null | undefined,
+  today: string = new Date().toISOString().slice(0, 10)
+): boolean => !!airDate && airDate.slice(0, 10) < today;
+
+/** One version's mark on an episode: it has the file, or it is missing. */
+export interface EpisodeMark {
+  key: string;
+  label?: string;
+  held: boolean;
+}
+
+/**
+ * The marks of an episode in an expanded season: one per version holding
+ * files in the season. A version without the episode is marked missing
+ * once the episode has aired; before that it gets no mark.
+ */
+export const episodeMarks = (
+  holders: SeasonHolder[],
+  episodeNumber: number,
+  aired: boolean
+): EpisodeMark[] =>
+  holders
+    .map((holder) => ({
+      key: holder.key,
+      label: holder.label,
+      held: holder.episodes.includes(episodeNumber),
+    }))
+    .filter((mark) => mark.held || aired);
+
 /** How many of a season's episodes a version holds. */
 export interface EpisodeProgress {
   held: number;

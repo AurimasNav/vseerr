@@ -1,8 +1,11 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import EpisodeAvailability from '@app/components/TvDetails/Season/EpisodeAvailability';
 import EpisodeVersions from '@app/components/TvDetails/Season/EpisodeVersions';
 import defineMessages from '@app/utils/defineMessages';
+import type { SeasonHolder } from '@app/utils/seasonVersions';
+import { episodeMarks, hasAired } from '@app/utils/seasonVersions';
 import type { SeasonEpisodeVersionsResponse } from '@server/lib/mediaVersions';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
@@ -18,9 +21,11 @@ type SeasonProps = {
   tvId: number;
   /** VSeerr: set when a version holds files in this season. */
   mediaId?: number;
+  /** VSeerr: the versions with files in this season, for episode marks. */
+  holders?: SeasonHolder[];
 };
 
-const Season = ({ seasonNumber, tvId, mediaId }: SeasonProps) => {
+const Season = ({ seasonNumber, tvId, mediaId, holders = [] }: SeasonProps) => {
   const intl = useIntl();
   const { data, error } = useSWR<SeasonWithEpisodes>(
     `/api/v1/tv/${tvId}/season/${seasonNumber}`
@@ -60,6 +65,14 @@ const Season = ({ seasonNumber, tvId, mediaId }: SeasonProps) => {
                     {episode.airDate && (
                       <AirDateBadge airDate={episode.airDate} />
                     )}
+                    <EpisodeAvailability
+                      marks={episodeMarks(
+                        holders,
+                        episode.episodeNumber,
+                        hasAired(episode.airDate)
+                      )}
+                      labelled={holders.length > 1}
+                    />
                   </div>
                   <EpisodeVersions
                     versions={

@@ -2,7 +2,9 @@ import type { VersionDetails } from '@server/lib/mediaVersions';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  episodeMarks,
   episodeRanges,
+  hasAired,
   isMixedSeason,
   seasonEpisodeProgress,
   seasonHolders,
@@ -144,5 +146,48 @@ describe('seasonEpisodeProgress', () => {
   it('is empty without file data or episodes', () => {
     assert.deepEqual(seasonEpisodeProgress(undefined, 1, 8), {});
     assert.deepEqual(seasonEpisodeProgress(versions, 3, 8), {});
+  });
+});
+
+describe('hasAired', () => {
+  it('counts only days before today', () => {
+    assert.equal(hasAired('2026-11-03', '2026-11-04'), true);
+    assert.equal(hasAired('2026-11-04', '2026-11-04'), false);
+    assert.equal(hasAired('2026-11-05', '2026-11-04'), false);
+    assert.equal(hasAired(undefined, '2026-11-04'), false);
+    assert.equal(hasAired(null, '2026-11-04'), false);
+  });
+});
+
+describe('episodeMarks', () => {
+  const holders = [
+    { key: 'standard', episodes: [1, 2, 3] },
+    { key: 'sonarr:1', label: 'Russian', episodes: [1, 4] },
+  ];
+
+  it('marks each version as having the episode or missing it', () => {
+    assert.deepEqual(episodeMarks(holders, 1, true), [
+      { key: 'standard', label: undefined, held: true },
+      { key: 'sonarr:1', label: 'Russian', held: true },
+    ]);
+    assert.deepEqual(episodeMarks(holders, 2, true), [
+      { key: 'standard', label: undefined, held: true },
+      { key: 'sonarr:1', label: 'Russian', held: false },
+    ]);
+    assert.deepEqual(episodeMarks(holders, 5, true), [
+      { key: 'standard', label: undefined, held: false },
+      { key: 'sonarr:1', label: 'Russian', held: false },
+    ]);
+  });
+
+  it('marks nothing missing before the episode airs', () => {
+    assert.deepEqual(episodeMarks(holders, 5, false), []);
+    assert.deepEqual(episodeMarks(holders, 4, false), [
+      { key: 'sonarr:1', label: 'Russian', held: true },
+    ]);
+  });
+
+  it('has no marks without files in the season', () => {
+    assert.deepEqual(episodeMarks([], 1, true), []);
   });
 });

@@ -905,6 +905,11 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   season.seasonNumber,
                   true
                 );
+                // VSeerr: the versions with files in this season.
+                const holders = seasonHolders(
+                  versionFiles?.versions,
+                  season.seasonNumber
+                );
                 // VSeerr: a partly available season says how many episodes
                 // Standard has ("3 of 8"); the show keeps "Partially
                 // Available".
@@ -1177,13 +1182,13 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                               tvId={data.id}
                               seasonNumber={season.seasonNumber}
                               mediaId={
-                                seasonHolders(
-                                  versionFiles?.versions,
-                                  season.seasonNumber
-                                ).some((holder) => holder.key !== 'standard')
+                                holders.some(
+                                  (holder) => holder.key !== 'standard'
+                                )
                                   ? data.mediaInfo?.id
                                   : undefined
                               }
+                              holders={holders}
                             />
                           </DisclosurePanel>
                         </Transition>
