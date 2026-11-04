@@ -17,6 +17,9 @@ STATE_FILE = os.environ.get("DEMO_STATE", "demo-state.json")
 OUT = sys.argv[1] if len(sys.argv) > 1 else "screenshots"
 PASSWORD = "test1234"
 PAD = 12
+# Narrower than Tailwind's lg breakpoint (1024 px): a title page is one column,
+# so the season list is not squeezed next to the side panel.
+TV_VIEWPORT = {"width": 1000, "height": 1400}
 
 
 def sign_in(page: Page, email: str):
@@ -109,7 +112,7 @@ def versions_panel(browser, movie_id, name):
 
 def season_rows(browser, show):
     """A show's season rows, with the "?" of the season on air opened."""
-    context = browser.new_context(viewport={"width": 1280, "height": 1400}, device_scale_factor=1)
+    context = browser.new_context(viewport=TV_VIEWPORT, device_scale_factor=1)
     page = context.new_page()
     sign_in(page, "demo@seerr.dev")
     page.goto(f"{BASE}/tv/{show['tmdbId']}")
@@ -126,17 +129,22 @@ def season_rows(browser, show):
         help_icon.click()
         page.locator("[data-testid=season-counts-help-content]").wait_for(timeout=10000)
         page.wait_for_timeout(500)
-    boxes = [box(heading, "seasons heading")] + [box(row, "season row") for row in rows]
+    row_boxes = [box(row, "season row") for row in rows]
+    boxes = [box(heading, "seasons heading")] + row_boxes
     tooltip = page.locator("[data-testid=season-counts-help-content]")
     if tooltip.count():
         boxes.append(box(tooltip.first, "season counts help"))
-    shoot(page, "season-rows", boxes)
+    left = min(b["x"] for b in row_boxes)
+    right = max(b["x"] + b["width"] for b in row_boxes)
+    top = min(b["y"] for b in boxes)
+    bottom = max(b["y"] + b["height"] for b in boxes)
+    shoot(page, "season-rows", [{"x": left, "y": top, "width": right - left, "height": bottom - top}])
     context.close()
 
 
 def season_episodes(browser, show):
     """The season on air expanded: had, missing and upcoming episodes."""
-    context = browser.new_context(viewport={"width": 1280, "height": 2400}, device_scale_factor=1)
+    context = browser.new_context(viewport={**TV_VIEWPORT, "height": 2400}, device_scale_factor=1)
     page = context.new_page()
     sign_in(page, "demo@seerr.dev")
     page.goto(f"{BASE}/tv/{show['tmdbId']}")

@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -135,6 +136,11 @@ def handler_for(port):
             sent = json.loads(self.rfile.read(length) or b"{}")
             path, _ = self.target()
             print(f"{port} {self.command} {path}", flush=True)
+            if path in ("/movie", "/series"):
+                # A real instance takes a moment to add a title. Answering at
+                # once lets Seerr's follow-up save overwrite the request's
+                # "Requested" status with the stale "Pending" one.
+                time.sleep(1)
             if path == "/command":
                 self.reply(201, {"id": 1, "name": sent.get("name"), "status": "queued"})
             else:
