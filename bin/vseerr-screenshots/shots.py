@@ -92,8 +92,17 @@ def request_dialog(browser, movie_id):
     dialog.get_by_role("radio", name=re.compile("^German")).click()
     dialog.get_by_text("Quality Profile").first.wait_for(timeout=30000)
     # Tick the request option: the profile below switches to the one it selects.
-    dialog.get_by_text("English is fine until a German dub appears").click()
-    dialog.get_by_text("German or English").first.wait_for(timeout=10000)
+    option = dialog.get_by_role("checkbox", name="English is fine until a German dub appears")
+    if not option.is_checked():
+        option.check()
+    profile = dialog.locator("select#profile")
+    for _ in range(50):
+        chosen = profile.evaluate("select => select.selectedOptions[0]?.textContent ?? ''") if profile.count() else ""
+        if "German or English" in chosen:
+            break
+        page.wait_for_timeout(200)
+    else:
+        sys.exit(f"request dialog: the option did not select its profile (shows {chosen!r})")
     settle(page, 1500)
     shoot(page, "request-dialog", [box(dialog, "request dialog")], pad=0)
     context.close()
