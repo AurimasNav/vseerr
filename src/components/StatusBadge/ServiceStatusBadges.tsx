@@ -19,6 +19,8 @@ interface ServiceStatusBadgesProps {
   tmdbId?: number;
   title?: string | string[];
   seasonNumber?: number;
+  /** Status text by server id, in place of the status name. */
+  statusTexts?: Record<number, string>;
 }
 
 const ServiceStatusBadges = ({
@@ -29,6 +31,7 @@ const ServiceStatusBadges = ({
   tmdbId,
   title,
   seasonNumber,
+  statusTexts,
 }: ServiceStatusBadgesProps) => {
   const intl = useIntl();
   const { data: services } = useSWR<ServiceCommonServer[]>(
@@ -57,7 +60,9 @@ const ServiceStatusBadges = ({
           inProgress={downloadItem.length > 0}
           title={title}
           statusLabelOverride={intl.formatMessage(messages.statusinservice, {
-            status: getStatusLabel(intl, status, downloadItem.length > 0),
+            status:
+              statusTexts?.[server.id] ??
+              getStatusLabel(intl, status, downloadItem.length > 0),
             label: server.buttonLabel ?? server.name,
           })}
           mediaType={mediaType}

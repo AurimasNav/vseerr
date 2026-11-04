@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   episodeRanges,
   isMixedSeason,
+  seasonEpisodeProgress,
   seasonHolders,
   standardSeasonRequest,
 } from './seasonVersions';
@@ -122,5 +123,26 @@ describe('standardSeasonRequest', () => {
     assert.strictEqual(standardSeasonRequest(requests, 2, true)?.id, 4);
     assert.strictEqual(standardSeasonRequest(requests, 1, false)?.id, 1);
     assert.strictEqual(standardSeasonRequest(requests, 3, false), undefined);
+  });
+});
+
+describe('seasonEpisodeProgress', () => {
+  const versions = [
+    version('standard', { 1: [1, 2, 3, 4, 5, 6, 7, 8], 2: [1, 2, 3] }),
+    version('sonarr:1', { 1: [1, 2, 3, 4, 5, 6, 7, 8] }, 'Russian'),
+    version('sonarr:2', { 2: [2, 2, 5] }, 'Lithuanian'),
+  ];
+
+  it('lists only the versions that hold part of the season', () => {
+    assert.deepEqual(seasonEpisodeProgress(versions, 1, 8), {});
+    assert.deepEqual(seasonEpisodeProgress(versions, 2, 8), {
+      standard: { held: 3, total: 8 },
+      'sonarr:2': { held: 2, total: 8 },
+    });
+  });
+
+  it('is empty without file data or episodes', () => {
+    assert.deepEqual(seasonEpisodeProgress(undefined, 1, 8), {});
+    assert.deepEqual(seasonEpisodeProgress(versions, 3, 8), {});
   });
 });

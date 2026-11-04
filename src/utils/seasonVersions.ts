@@ -27,6 +27,32 @@ export const seasonHolders = (
     }))
     .filter((holder) => holder.episodes.length > 0);
 
+/** How many of a season's episodes a version holds. */
+export interface EpisodeProgress {
+  held: number;
+  total: number;
+}
+
+/**
+ * The versions that hold some but not all of a season's episodes, by key
+ * (`standard` or `sonarr:<id>`). A season row shows these as "3 of 8"
+ * instead of "Partially Available", which is kept for the whole show.
+ */
+export const seasonEpisodeProgress = (
+  versions: VersionDetails[] | undefined,
+  seasonNumber: number,
+  episodeCount: number
+): Record<string, EpisodeProgress> => {
+  const progress: Record<string, EpisodeProgress> = {};
+  for (const holder of seasonHolders(versions, seasonNumber)) {
+    const held = new Set(holder.episodes).size;
+    if (held < episodeCount) {
+      progress[holder.key] = { held, total: episodeCount };
+    }
+  }
+  return progress;
+};
+
 /**
  * A season is mixed when its episodes are split across versions: no single
  * version holds every episode that some version has. A version holding the
