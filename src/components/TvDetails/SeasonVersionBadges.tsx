@@ -4,12 +4,12 @@ import Tooltip from '@app/components/Common/Tooltip';
 import { getStatusLabel } from '@app/components/StatusBadge';
 import ServiceStatusBadges from '@app/components/StatusBadge/ServiceStatusBadges';
 import defineMessages from '@app/utils/defineMessages';
-import type { EpisodeProgress } from '@app/utils/seasonVersions';
+import type { SeasonProgress } from '@app/utils/seasonVersions';
 import {
   episodeRanges,
   isMixedSeason,
-  seasonEpisodeProgress,
   seasonHolders,
+  seasonProgress,
 } from '@app/utils/seasonVersions';
 import { getServiceStatusItems } from '@app/utils/serviceRequestStatus';
 import { MediaStatus } from '@server/constants/media';
@@ -29,16 +29,47 @@ const messages = defineMessages('components.TvDetails.SeasonVersionBadges', {
   labelepisodesof: '{label}: {held} of {total}',
 });
 
-/** "3 of 8": a season's episodes that a version holds. */
+/** "3 of 5": a season's aired episodes that a version holds. */
 export const episodeProgressLabel = (
   intl: IntlShape,
-  progress: EpisodeProgress
-): string => intl.formatMessage(messages.episodesof, { ...progress });
+  progress: { held: number; aired: number }
+): string =>
+  intl.formatMessage(messages.episodesof, {
+    held: progress.held,
+    total: progress.aired,
+  });
+
+/**
+ * What a partly available season row shows for a version: "3 of 5" while
+ * aired episodes are missing, Available once only unaired ones are left.
+ * Without file data it stays Partially Available.
+ */
+export const seasonDisplay = (
+  intl: IntlShape,
+  status: MediaStatus,
+  progress?: SeasonProgress
+): { status: MediaStatus; text?: string; counted: boolean } => {
+  if (status !== MediaStatus.PARTIALLY_AVAILABLE || !progress) {
+    return { status, counted: false };
+  }
+  if (progress.missing.length === 0) {
+    return {
+      status: MediaStatus.AVAILABLE,
+      text: getStatusLabel(intl, MediaStatus.AVAILABLE),
+      counted: false,
+    };
+  }
+  return {
+    status,
+    text: episodeProgressLabel(intl, progress),
+    counted: true,
+  };
+};
 
 interface SeasonVersionBadgesProps {
   seasonNumber: number;
-  /** Episodes in the season (from TMDB). */
-  episodeCount: number;
+  /** Episodes of the season aired so far. */
+  aired: number;
   media?: Media;
   services?: ServiceCommonServer[];
   versions?: VersionDetails[];
@@ -52,7 +83,7 @@ interface SeasonVersionBadgesProps {
  */
 const SeasonVersionBadges = ({
   seasonNumber,
-  episodeCount,
+  aired,
   media,
   services,
   versions,
@@ -73,20 +104,16 @@ const SeasonVersionBadges = ({
 
   const held = new Set(holders.flatMap((holder) => holder.episodes)).size;
   const mixedStatus =
-    held >= episodeCount
-      ? MediaStatus.AVAILABLE
-      : MediaStatus.PARTIALLY_AVAILABLE;
-  // A partly available season says how many episodes the version has.
-  const progress = seasonEpisodeProgress(versions, seasonNumber, episodeCount);
-  const progressOf = (serverId: number, status: MediaStatus) =>
-    status === MediaStatus.PARTIALLY_AVAILABLE
-      ? progress[`sonarr:${serverId}`]
-      : undefined;
+    held >= aired ? MediaStatus.AVAILABLE : MediaStatus.PARTIALLY_AVAILABLE;
+  // A partly available season counts the version's aired episodes.
+  const progress = seasonProgress(holders, aired);
+  const displayOf = (serverId: number, status: MediaStatus) =>
+    seasonDisplay(intl, status, progress[`sonarr:${serverId}`]);
   const statusTexts: Record<number, string> = {};
   for (const { server, status } of items) {
-    const serverProgress = progressOf(server.id, status);
-    if (serverProgress) {
-      statusTexts[server.id] = episodeProgressLabel(intl, serverProgress);
+    const display = displayOf(server.id, status);
+    if (display.text) {
+      statusTexts[server.id] = display.text;
     }
   }
   const mixedDetails = holders.map((holder) => (
@@ -119,10 +146,7 @@ const SeasonVersionBadges = ({
                 {intl.formatMessage(messages.mixed, {
                   status:
                     mixedStatus === MediaStatus.PARTIALLY_AVAILABLE
-                      ? episodeProgressLabel(intl, {
-                          held,
-                          total: episodeCount,
-                        })
+                      ? episodeProgressLabel(intl, { held, aired })
                       : getStatusLabel(intl, mixedStatus),
                 })}
               </Badge>
@@ -133,16 +157,18 @@ const SeasonVersionBadges = ({
       <div className="flex items-center space-x-1 md:hidden">
         {items.map(({ server, status }) => {
           const label = server.buttonLabel ?? server.name;
-          const serverProgress = progressOf(server.id, status);
+          const serverProgress = progress[`sonarr:${server.id}`];
+          const display = displayOf(server.id, status);
           return (
             <StatusBadgeMini
               key={`season-version-mini-${server.id}`}
-              status={status}
+              status={display.status}
               label={
-                serverProgress
+                display.counted && serverProgress
                   ? intl.formatMessage(messages.labelepisodesof, {
                       label,
-                      ...serverProgress,
+                      held: serverProgress.held,
+                      total: serverProgress.aired,
                     })
                   : label
               }

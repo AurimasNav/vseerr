@@ -6,8 +6,9 @@ import {
   episodeRanges,
   hasAired,
   isMixedSeason,
-  seasonEpisodeProgress,
+  seasonAiring,
   seasonHolders,
+  seasonProgress,
   standardSeasonRequest,
 } from './seasonVersions';
 
@@ -128,24 +129,62 @@ describe('standardSeasonRequest', () => {
   });
 });
 
-describe('seasonEpisodeProgress', () => {
-  const versions = [
-    version('standard', { 1: [1, 2, 3, 4, 5, 6, 7, 8], 2: [1, 2, 3] }),
-    version('sonarr:1', { 1: [1, 2, 3, 4, 5, 6, 7, 8] }, 'Russian'),
-    version('sonarr:2', { 2: [2, 2, 5] }, 'Lithuanian'),
-  ];
+describe('seasonAiring', () => {
+  const holders = [{ key: 'standard', episodes: [1, 2, 3] }];
+  const last = { seasonNumber: 2, episodeNumber: 5 };
+  const next = { seasonNumber: 2, episodeNumber: 6, airDate: '2026-11-12' };
 
-  it('lists only the versions that hold part of the season', () => {
-    assert.deepEqual(seasonEpisodeProgress(versions, 1, 8), {});
-    assert.deepEqual(seasonEpisodeProgress(versions, 2, 8), {
-      standard: { held: 3, total: 8 },
-      'sonarr:2': { held: 2, total: 8 },
+  it('counts the current season up to the last aired episode', () => {
+    assert.deepEqual(seasonAiring(2, 8, holders, last, next), {
+      aired: 5,
+      upcoming: 3,
+      next,
     });
   });
 
-  it('is empty without file data or episodes', () => {
-    assert.deepEqual(seasonEpisodeProgress(undefined, 1, 8), {});
-    assert.deepEqual(seasonEpisodeProgress(versions, 3, 8), {});
+  it('counts earlier seasons as aired and later ones as upcoming', () => {
+    assert.deepEqual(seasonAiring(1, 8, holders, last, next), {
+      aired: 8,
+      upcoming: 0,
+      next: undefined,
+    });
+    assert.deepEqual(seasonAiring(3, 8, [], last, next), {
+      aired: 0,
+      upcoming: 8,
+      next: undefined,
+    });
+  });
+
+  it('counts a file for a later episode as aired', () => {
+    const ahead = [{ key: 'sonarr:1', episodes: [7] }];
+    assert.equal(seasonAiring(2, 8, ahead, last, next).aired, 7);
+  });
+
+  it('counts everything as aired without TMDB data or for specials', () => {
+    assert.equal(seasonAiring(2, 8, holders, undefined).aired, 8);
+    assert.equal(seasonAiring(0, 4, holders, last).aired, 4);
+  });
+});
+
+describe('seasonProgress', () => {
+  it('lists the aired episodes each version is missing', () => {
+    assert.deepEqual(
+      seasonProgress(
+        [
+          { key: 'standard', episodes: [1, 2, 3, 4, 5] },
+          { key: 'sonarr:1', label: 'Russian', episodes: [1, 2, 3, 6] },
+        ],
+        5
+      ),
+      {
+        standard: { held: 5, aired: 5, missing: [] },
+        'sonarr:1': { held: 3, aired: 5, missing: [4, 5] },
+      }
+    );
+  });
+
+  it('is empty without versions', () => {
+    assert.deepEqual(seasonProgress([], 5), {});
   });
 });
 

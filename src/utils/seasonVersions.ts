@@ -58,28 +58,90 @@ export const episodeMarks = (
     }))
     .filter((mark) => mark.held || aired);
 
-/** How many of a season's episodes a version holds. */
-export interface EpisodeProgress {
-  held: number;
-  total: number;
+/** An episode TMDB lists as the last aired or next to air. */
+export interface AiringEpisode {
+  seasonNumber: number;
+  episodeNumber: number;
+  airDate?: string | null;
+}
+
+/** How far a season has aired. */
+export interface SeasonAiring {
+  /** Episodes aired so far (1..aired). */
+  aired: number;
+  /** Episodes still to air. */
+  upcoming: number;
+  /** The next episode to air, when it is in this season. */
+  next?: AiringEpisode;
 }
 
 /**
- * The versions that hold some but not all of a season's episodes, by key
- * (`standard` or `sonarr:<id>`). A season row shows these as "3 of 8"
- * instead of "Partially Available", which is kept for the whole show.
+ * How many of a season's episodes have aired, from the show's last aired
+ * episode on TMDB. A file for a later episode counts it as aired too (TMDB
+ * can lag). Without TMDB data, or for specials, every episode counts as
+ * aired.
  */
-export const seasonEpisodeProgress = (
-  versions: VersionDetails[] | undefined,
+export const seasonAiring = (
   seasonNumber: number,
-  episodeCount: number
-): Record<string, EpisodeProgress> => {
-  const progress: Record<string, EpisodeProgress> = {};
-  for (const holder of seasonHolders(versions, seasonNumber)) {
-    const held = new Set(holder.episodes).size;
-    if (held < episodeCount) {
-      progress[holder.key] = { held, total: episodeCount };
+  episodeCount: number,
+  holders: SeasonHolder[],
+  lastEpisodeToAir?: AiringEpisode | null,
+  nextEpisodeToAir?: AiringEpisode | null
+): SeasonAiring => {
+  let aired = episodeCount;
+  if (
+    lastEpisodeToAir &&
+    seasonNumber > 0 &&
+    lastEpisodeToAir.seasonNumber > 0
+  ) {
+    if (seasonNumber > lastEpisodeToAir.seasonNumber) {
+      aired = 0;
+    } else if (seasonNumber === lastEpisodeToAir.seasonNumber) {
+      aired = lastEpisodeToAir.episodeNumber;
     }
+  }
+  const newestFile = Math.max(
+    0,
+    ...holders.flatMap((holder) => holder.episodes)
+  );
+  aired = Math.min(episodeCount, Math.max(aired, newestFile));
+  return {
+    aired,
+    upcoming: episodeCount - aired,
+    next:
+      nextEpisodeToAir?.seasonNumber === seasonNumber &&
+      nextEpisodeToAir.episodeNumber > aired
+        ? nextEpisodeToAir
+        : undefined,
+  };
+};
+
+/** A version's aired episodes in a season: how many it has, which are missing. */
+export interface SeasonProgress {
+  held: number;
+  aired: number;
+  missing: number[];
+}
+
+/**
+ * Each version's progress through a season's aired episodes, by key
+ * (`standard` or `sonarr:<id>`). A season row shows "3 of 5" for a version
+ * missing aired episodes, and Available when only unaired ones are left.
+ */
+export const seasonProgress = (
+  holders: SeasonHolder[],
+  aired: number
+): Record<string, SeasonProgress> => {
+  const progress: Record<string, SeasonProgress> = {};
+  for (const holder of holders) {
+    const episodes = new Set(holder.episodes);
+    const missing: number[] = [];
+    for (let episode = 1; episode <= aired; episode++) {
+      if (!episodes.has(episode)) {
+        missing.push(episode);
+      }
+    }
+    progress[holder.key] = { held: aired - missing.length, aired, missing };
   }
   return progress;
 };
