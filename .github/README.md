@@ -31,6 +31,8 @@ Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VS
 
 In Plex, add each version's media folder to the same library. Plex then shows the title once and lets viewers pick the version when playing.
 
+Many Seerr, Overseerr and Ombi feature requests look like separate edge cases, such as a 3D or remux library, a dubbed copy or a second language, but all of them need more than one copy of a title. They are listed in [Requests in Seerr, Overseerr and Ombi that versions cover](../vseerr-docs/feature-requests.md).
+
 Everything else is Seerr as released upstream, apart from earlier dependency fixes (see [How it relates to Seerr](#how-it-relates-to-seerr)).
 
 ## Screenshots
