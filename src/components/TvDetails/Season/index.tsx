@@ -72,6 +72,9 @@ const Season = ({ seasonNumber, tvId, mediaId, holders = [] }: SeasonProps) => {
                         hasAired(episode.airDate)
                       )}
                       labelled={holders.length > 1}
+                      upcoming={
+                        holders.length > 0 && !hasAired(episode.airDate)
+                      }
                     />
                   </div>
                   <EpisodeVersions
