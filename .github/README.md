@@ -17,6 +17,7 @@ VSeerr adds versions:
 - An administrator connects several Radarr or Sonarr instances and gives each one a version name and a default quality profile, for example "German", "Best quality" or "Kids".
 - When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the user's default; it is saved with the account.
 - Each version tracks its own requests and availability, so a title can exist once per version.
+- For shows, each season row on the title page shows every version's status. A version missing aired episodes shows how many it has, for example "3 of 4"; a "?" next to it lists the missing episodes and how many are still to air. An expanded season marks each episode as there, missing or upcoming.
 - Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
 - A version can offer extra request options, each tied to one of its quality profiles. For example, a German version can offer "English is fine until a German dub appears". Ticking an option selects its profile in the request dialog's Advanced section; picking another profile there afterwards overrides it.
 - The standard server can offer request options too. An option marked "Anime only" is offered only for titles with TMDB's anime keyword. For example, "English dub required" can switch an anime request from a subs-friendly profile to a dub-only one.
@@ -34,7 +35,7 @@ Everything else is Seerr as released upstream, apart from earlier dependency fix
 
 ## Screenshots
 
-The screenshots use demo data: a standard Radarr plus "German" and "French" versions.
+The screenshots use demo data: a standard Radarr plus "German" and "French" versions, and a standard Sonarr plus a "German" version. They are taken by the VSeerr Screenshots workflow (`.github/workflows/vseerr-screenshots.yml`).
 
 **Settings and requesting.** In Settings → Services, each Radarr or Sonarr server gets a version name, its defining formats and its request options. The request dialog shows the same things from the user's side: the version name as a choice, and the request option with the profile it selects.
 
@@ -51,6 +52,14 @@ Each version shows who has already requested it. The user picks a version, ticks
 **Covered by another version.** Inception's Standard file already has German audio, which is a defining format of the German version. German therefore shows as available through Standard, and only users with Manage Requests can request it separately.
 
 <img src="../vseerr-docs/images/versions-coverage.png" alt="Versions panel: Standard with 1080p, English and German; German not requested, available through Standard" width="320">
+
+**Seasons.** A show's season rows list each version separately. Counts only include episodes that have aired: here Standard has 3 of the 4 aired episodes of the current season, and the "?" lists the missing one and the episodes still to come. German has part of the previous season.
+
+<img src="../vseerr-docs/images/season-rows.png" alt="Season rows: the current season in Standard at 3 of 4 with the question mark opened, listing the missing episode and the upcoming ones; the previous season complete in Standard and 6 of 22 in German; the season before complete in both" width="700">
+
+Expanding a season marks each episode: a checkmark when the version has it, "Missing" when an aired episode is not there, "Upcoming" when it has not aired yet.
+
+<img src="../vseerr-docs/images/season-episodes.png" alt="Expanded season: the next episode marked Upcoming, the newest aired episode with a checkmark, the one before marked Missing, and an older one with a checkmark" width="500">
 
 ## Installing
 
