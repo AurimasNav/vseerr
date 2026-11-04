@@ -26,7 +26,9 @@ import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import ServiceStatusBadges from '@app/components/StatusBadge/ServiceStatusBadges';
 import Season from '@app/components/TvDetails/Season';
-import SeasonVersionBadges from '@app/components/TvDetails/SeasonVersionBadges';
+import SeasonVersionBadges, {
+  episodeProgressLabel,
+} from '@app/components/TvDetails/SeasonVersionBadges';
 import VersionsPanel from '@app/components/VersionsPanel';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
@@ -39,6 +41,7 @@ import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import {
+  seasonEpisodeProgress,
   seasonHolders,
   standardSeasonRequest,
 } from '@app/utils/seasonVersions';
@@ -902,6 +905,17 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   season.seasonNumber,
                   true
                 );
+                // VSeerr: a partly available season says how many episodes
+                // Standard has ("3 of 8"); the show keeps "Partially
+                // Available".
+                const standardProgress =
+                  mSeason?.status === MediaStatus.PARTIALLY_AVAILABLE
+                    ? seasonEpisodeProgress(
+                        versionFiles?.versions,
+                        season.seasonNumber,
+                        season.episodeCount
+                      ).standard
+                    : undefined;
 
                 if (season.episodeCount === 0) {
                   return null;
@@ -987,15 +1001,31 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                               <>
                                 <div className="hidden md:flex">
                                   <Badge badgeType="success">
-                                    {intl.formatMessage(
-                                      mSeason?.status === MediaStatus.AVAILABLE
-                                        ? globalMessages.available
-                                        : globalMessages.partiallyavailable
-                                    )}
+                                    {standardProgress
+                                      ? episodeProgressLabel(
+                                          intl,
+                                          standardProgress
+                                        )
+                                      : intl.formatMessage(
+                                          mSeason?.status ===
+                                            MediaStatus.AVAILABLE
+                                            ? globalMessages.available
+                                            : globalMessages.partiallyavailable
+                                        )}
                                   </Badge>
                                 </div>
                                 <div className="flex md:hidden">
-                                  <StatusBadgeMini status={mSeason!.status} />
+                                  <StatusBadgeMini
+                                    status={mSeason!.status}
+                                    label={
+                                      standardProgress
+                                        ? episodeProgressLabel(
+                                            intl,
+                                            standardProgress
+                                          )
+                                        : undefined
+                                    }
+                                  />
                                 </div>
                               </>
                             )}
