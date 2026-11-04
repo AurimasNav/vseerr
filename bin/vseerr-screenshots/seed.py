@@ -286,20 +286,32 @@ def main():
                {"permissions": 32 | 8192, "requestServices": ["radarr:1", "radarr:2", "sonarr:1"]}, expect=(200,))
 
     # The Matrix: Standard requested by admin, German by demo.
+    # Requests are dated back at the end: sending a request to Radarr saves it
+    # again in the background, which would undo an earlier change.
+    backdate = []
     _, standard = admin.call("POST", "/request", {"mediaType": "movie", "mediaId": MATRIX}, expect=(201,))
-    date_back(standard["id"], 13)
+    backdate.append((standard["id"], 13))
     _, german = admin.call("POST", "/request", {"mediaType": "movie", "mediaId": MATRIX, "isServiceRequest": True,
                                                 "serverId": 1, "userId": demo_id}, expect=(201,))
     if german.get("status") == 1:  # pending; requests made by an admin are usually approved already
         admin.call("POST", f"/request/{german['id']}/approve", expect=(200,))
-    date_back(german["id"], 11)
+    backdate.append((german["id"], 11))
 
     run_job(admin, "radarr-scan")
     run_job(admin, "sonarr-scan")
 
     # Pulp Fiction: Standard requested by admin and still downloading.
     _, pulp = admin.call("POST", "/request", {"mediaType": "movie", "mediaId": PULP_FICTION}, expect=(201,))
-    date_back(pulp["id"], 3)
+    backdate.append((pulp["id"], 3))
+    time.sleep(5)
+    for request_id, days in backdate:
+        date_back(request_id, days)
+    for request_id, days in backdate:
+        _, request = admin.call("GET", f"/request/{request_id}", expect=(200,))
+        age = datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(
+            request["createdAt"].replace("Z", "+00:00"))
+        if age.days != days:
+            sys.exit(f"Request {request_id} is {age.days} days old, expected {days}")
 
     # What VSeerr reports now.
     failures = []
