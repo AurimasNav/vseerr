@@ -1,0 +1,118 @@
+---
+# Takes the screenshots in the README (.github/README.md) from demo data.
+#
+# Builds VSeerr, starts it with the Cypress test users and fake Radarr and
+# Sonarr instances (bin/vseerr-screenshots/fake_arr.py), adds demo servers,
+# versions and requests (seed.py) and takes the screenshots with Playwright
+# (shots.py). The pictures are uploaded as the "vseerr-screenshots" artifact;
+# copying them to vseerr-docs/images/ is done by hand in a pull request.
+#
+# Run it from the Actions tab after a change to the pages it shows. It also
+# runs on pull requests that change the scripts or this file.
+name: 'VSeerr Screenshots'
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'bin/vseerr-screenshots/**'
+      - '.github/workflows/vseerr-screenshots.yml'
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pnpm Setup
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: 'package.json'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        env:
+          CI: true
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Prepare the database with the test users
+        env:
+          WITH_MIGRATIONS: true
+        run: pnpm cypress:prepare
+
+      - name: Install Playwright
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $venv = Join-Path $env:RUNNER_TEMP venv
+          python3 -m venv $venv
+          & "$venv/bin/pip" install --quiet --require-hashes --no-deps -r bin/vseerr-screenshots/requirements.txt
+          & "$venv/bin/python" -m playwright install --with-deps --only-shell chromium
+
+      - name: Take the screenshots
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $python = Join-Path $env:RUNNER_TEMP venv/bin/python
+          $logs = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP logs)
+          $out = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP screenshots)
+          $env:DEMO_ARR_DATA = Join-Path $env:RUNNER_TEMP demo-arr.json
+          $env:DEMO_STATE = Join-Path $env:RUNNER_TEMP demo-state.json
+          $env:VSEERR_DB = 'config/db/db.sqlite3'
+
+          Start-Process -FilePath $python -ArgumentList 'bin/vseerr-screenshots/fake_arr.py' `
+            -RedirectStandardOutput (Join-Path $logs fake-arr.log) `
+            -RedirectStandardError (Join-Path $logs fake-arr-errors.log) | Out-Null
+
+          $env:NODE_ENV = 'production'
+          $env:PORT = '5055'
+          $serverLog = Join-Path $logs server.log
+          Start-Process -FilePath node -ArgumentList 'dist/index.js' `
+            -RedirectStandardOutput $serverLog `
+            -RedirectStandardError (Join-Path $logs server-errors.log) | Out-Null
+          $ready = $false
+          foreach ($i in 1..90) {
+            if ((Test-Path $serverLog) -and (Select-String -Path $serverLog -Pattern 'Server ready on port 5055' -Quiet)) {
+              $ready = $true
+              break
+            }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) {
+            Get-Content $serverLog -Tail 50 -ErrorAction SilentlyContinue
+            throw 'VSeerr did not start.'
+          }
+
+          & $python bin/vseerr-screenshots/seed.py
+          & $python bin/vseerr-screenshots/shots.py $out
+          Get-ChildItem $out | ForEach-Object { "$($_.Name): $($_.Length) bytes" }
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vseerr-screenshots
+          path: |
+            ${{ runner.temp }}/screenshots
+            ${{ runner.temp }}/logs
+          if-no-files-found: warn
+          retention-days: 14
