@@ -15,7 +15,7 @@ Seerr tracks each title once: a movie or show is either requested or it is not. 
 VSeerr adds versions:
 
 - An administrator connects several Radarr or Sonarr instances and gives each one a version name and a default quality profile, for example "German", "Best quality" or "Kids".
-- When requesting, a user picks the version in the request dialog, then any quality profile of that instance. A version can be set as the user's default; it is saved with the account.
+- When requesting, a user picks the version in the request dialog, and its default quality profile is used. Users with the Advanced Requests permission can choose any quality profile of that instance. A version can be set as the user's default; it is saved with the account.
 - Each version tracks its own requests and availability, so a title can exist once per version.
 - For shows, each season row on the title page shows every version's status. A version missing aired episodes shows how many it has, for example "3 of 4"; a "?" next to it lists the missing episodes and how many are still to air. An expanded season marks each episode as there, missing or upcoming.
 - Administrators choose which users can request which versions. Each user requests one version of a title; users with the Manage Requests permission can request several.
@@ -30,6 +30,8 @@ VSeerr adds versions:
 Language, quality cutoffs and file sizes are set in Radarr and Sonarr, not in VSeerr. A "German" version is a Radarr instance whose profiles prefer German audio. Its profiles can still differ, for example one with a 720p cutoff and one with a 1080p cutoff.
 
 In Plex, add each version's media folder to the same library. Plex then shows the title once and lets viewers pick the version when playing.
+
+Many Seerr, Overseerr and Ombi feature requests look like separate edge cases, such as a 3D or remux library, a dubbed copy or a second language, but most of them need more than one copy of a title. They are listed in [Requests in Seerr, Overseerr and Ombi that versions cover](../vseerr-docs/feature-requests.md).
 
 Everything else is Seerr as released upstream, apart from earlier dependency fixes (see [How it relates to Seerr](#how-it-relates-to-seerr)).
 
