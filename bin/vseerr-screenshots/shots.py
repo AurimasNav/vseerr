@@ -91,6 +91,9 @@ def request_dialog(browser, movie_id):
     dialog = page.get_by_role("dialog").last
     dialog.get_by_role("radio", name=re.compile("^German")).click()
     dialog.get_by_text("Quality Profile").first.wait_for(timeout=30000)
+    # Tick the request option: the profile below switches to the one it selects.
+    dialog.get_by_text("English is fine until a German dub appears").click()
+    dialog.get_by_text("German or English").first.wait_for(timeout=10000)
     settle(page, 1500)
     shoot(page, "request-dialog", [box(dialog, "request dialog")], pad=0)
     context.close()
@@ -144,7 +147,8 @@ def season_rows(browser, show):
 
 def season_episodes(browser, show):
     """The season on air expanded: had, missing and upcoming episodes."""
-    context = browser.new_context(viewport={**TV_VIEWPORT, "height": 2400}, device_scale_factor=1)
+    # Wide enough (xl) for each episode's still to sit beside its text.
+    context = browser.new_context(viewport={"width": 1280, "height": 2400}, device_scale_factor=1)
     page = context.new_page()
     sign_in(page, "demo@seerr.dev")
     page.goto(f"{BASE}/tv/{show['tmdbId']}")
