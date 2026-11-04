@@ -264,7 +264,7 @@ def main():
                    "8989": sonarr_std, "8990": sonarr_de}, handle)
 
     dub_option = {"id": "english-until-dub", "label": "English is fine until a German dub appears",
-                  "profileId": 2, "profileName": "German or English", "onlyIfNoOtherVersion": True,
+                  "profileId": 2, "profileName": "German or English", "onlyIfNoOtherVersion": False,
                   "animeOnly": False}
     for kind, body in [
         ("radarr", server_body("radarr", "Radarr", 7878, 1, "Best quality", "/movies", True)),
@@ -290,7 +290,8 @@ def main():
     date_back(standard["id"], 13)
     _, german = admin.call("POST", "/request", {"mediaType": "movie", "mediaId": MATRIX, "isServiceRequest": True,
                                                 "serverId": 1, "userId": demo_id}, expect=(201,))
-    admin.call("POST", f"/request/{german['id']}/approve", expect=(200,))
+    if german.get("status") == 1:  # pending; requests made by an admin are usually approved already
+        admin.call("POST", f"/request/{german['id']}/approve", expect=(200,))
     date_back(german["id"], 11)
 
     run_job(admin, "radarr-scan")

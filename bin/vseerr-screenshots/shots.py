@@ -61,7 +61,7 @@ def version_settings(browser):
     settle(page)
     card = page.locator("li", has=page.get_by_role("heading", name="Radarr German", exact=True))
     card.get_by_role("button", name="Edit").click()
-    dialog = page.get_by_role("dialog")
+    dialog = page.get_by_role("dialog").last
     dialog.locator("[data-testid=request-options]").wait_for(timeout=30000)
     settle(page, 1500)
     first = dialog.locator("label[for=buttonLabel]").locator("xpath=ancestor::div[contains(@class,'form-row')][1]")
@@ -85,7 +85,7 @@ def request_dialog(browser, movie_id):
     page.goto(f"{BASE}/movie/{movie_id}")
     settle(page)
     page.locator("button:enabled", has_text=re.compile(r"^\s*Request\s*$")).first.click()
-    dialog = page.get_by_role("dialog")
+    dialog = page.get_by_role("dialog").last
     dialog.get_by_role("radio", name=re.compile("^German")).click()
     dialog.get_by_text("Quality Profile").first.wait_for(timeout=30000)
     settle(page, 1500)
