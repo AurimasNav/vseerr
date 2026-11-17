@@ -128,6 +128,9 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         case 'modified':
           sortFilter = 'request.updatedAt';
           break;
+        case 'added':
+          sortFilter = 'request.createdAt';
+          break;
         default:
           sortFilter = 'request.id';
       }
@@ -196,6 +199,7 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
 
       const [requests, requestCount] = await query
         .orderBy(sortFilter, sortDirection)
+        .addOrderBy('request.id', sortDirection)
         .take(pageSize)
         .skip(skip)
         .getManyAndCount();
@@ -524,24 +528,25 @@ requestRoutes.put<{ requestId: string }>(
           return next({ status: 404, message: 'Request not found.' });
         }
 
-        // VSeerr: the body's media type picks the permission and server
-        // checks below, so it must be the request's own.
-        if (req.body.mediaType !== request.type) {
-          return next({
-            status: 400,
-            message: 'The media type does not match the request.',
-          });
-        }
-
         if (
           (request.requestedBy.id !== req.user?.id ||
-            (req.body.mediaType !== 'tv' &&
+            (request.type !== MediaType.TV &&
               !req.user?.hasPermission(Permission.REQUEST_ADVANCED))) &&
           !req.user?.hasPermission(Permission.MANAGE_REQUESTS)
         ) {
           return next({
             status: 403,
             message: 'You do not have permission to modify this request.',
+          });
+        }
+
+        // VSeerr: the body's media type picks the server checks below, so it
+        // must be the request's own. Seerr's permission check above uses the
+        // stored type.
+        if (req.body.mediaType !== request.type) {
+          return next({
+            status: 400,
+            message: 'The media type does not match the request.',
           });
         }
 
@@ -621,7 +626,7 @@ requestRoutes.put<{ requestId: string }>(
         const ownerChanging = requestUser.id !== previousOwnerId;
 
         return requestLock.dispatch(userKey(requestUser.id), async () => {
-          if (req.body.mediaType === MediaType.MOVIE) {
+          if (request.type === MediaType.MOVIE) {
             if (ownerChanging && !request.ignoreQuota) {
               const quotas = await requestUser.getQuota();
 
@@ -642,23 +647,32 @@ requestRoutes.put<{ requestId: string }>(
             request.requestedBy = requestUser as User;
 
             await requestRepository.save(request);
-          } else if (req.body.mediaType === MediaType.TV) {
+          } else if (request.type === MediaType.TV) {
             const mediaRepository = getRepository(Media);
-            if (!request.isServiceRequest) {
-              request.serverId = req.body.serverId;
+            if (
+              req.user?.hasPermission(
+                [Permission.MANAGE_REQUESTS, Permission.REQUEST_ADVANCED],
+                { type: 'or' }
+              )
+            ) {
+              if (!request.isServiceRequest) {
+                request.serverId = req.body.serverId;
+              }
+              request.profileId = req.body.profileId;
+              request.rootFolder = req.body.rootFolder;
+              request.languageProfileId = req.body.languageProfileId;
+              request.tags = req.body.tags;
             }
-            request.profileId = req.body.profileId;
-            request.rootFolder = req.body.rootFolder;
-            request.languageProfileId = req.body.languageProfileId;
-            request.tags = req.body.tags;
             request.requestedBy = requestUser as User;
 
             const requestedSeasons = req.body.seasons as number[] | undefined;
 
             if (!requestedSeasons || requestedSeasons.length === 0) {
-              throw new Error(
-                'Missing seasons. If you want to cancel a series request, use the DELETE method.'
-              );
+              return next({
+                status: 400,
+                message:
+                  'Missing seasons. If you want to cancel a series request, use the DELETE method.',
+              });
             }
 
             // Same key as create, so an edit cannot claim a season that a new

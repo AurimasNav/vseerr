@@ -411,9 +411,40 @@ export class MediaRequest {
       }
     }
 
-    let rootFolder = requestBody.rootFolder;
-    let profileId = requestBody.profileId;
-    let tags = requestBody.tags;
+    const isAdvanced = user.hasPermission(
+      [Permission.MANAGE_REQUESTS, Permission.REQUEST_ADVANCED],
+      { type: 'or' }
+    );
+
+    const requestsServer =
+      isAdvanced && requestBody.serverId != null && requestBody.serverId >= 0;
+
+    // An unknown serverId, or one for the other 4K type, falls back to the default server.
+    // VSeerr: a version request always goes to its own server (checked above).
+    const requestedServiceId = isServiceSpecific
+      ? (requestBody.serverId as number)
+      : requestsServer &&
+          (requestBody.mediaType === MediaType.MOVIE
+            ? settings.radarr
+            : settings.sonarr
+          ).some(
+            (server) =>
+              server.id === requestBody.serverId &&
+              server.is4k === requestBody.is4k
+          )
+        ? requestBody.serverId
+        : undefined;
+
+    const useRequestedOptions =
+      isAdvanced && (!requestsServer || requestedServiceId !== undefined);
+
+    let rootFolder = useRequestedOptions ? requestBody.rootFolder : undefined;
+    let profileId = useRequestedOptions ? requestBody.profileId : undefined;
+    let tags = useRequestedOptions ? requestBody.tags : undefined;
+    const languageProfileId = useRequestedOptions
+      ? requestBody.languageProfileId
+      : undefined;
+
     let optionProfileApplied = false;
 
     // VSeerr request option: a choice the admin attached to the version
@@ -431,7 +462,7 @@ export class MediaRequest {
         : standardOptionServer<(typeof servers)[number]>(
             servers,
             !!requestBody.is4k,
-            requestBody.serverId
+            requestedServiceId
           );
       const option = server?.requestOptions?.find(
         (o) => o.id === requestBody.requestOption
@@ -477,14 +508,11 @@ export class MediaRequest {
     const ruleResult = await overrideRules({
       mediaType: requestBody.mediaType,
       is4k: requestBody.is4k || false,
+      serviceId: requestedServiceId,
       tmdbMedia,
       requestUser,
       tags,
     });
-    const isAdvanced = user.hasPermission(
-      [Permission.MANAGE_REQUESTS, Permission.REQUEST_ADVANCED],
-      { type: 'or' }
-    );
     // Advanced users pick these in the modal, so we don't want to override them if they are set
     const overrideRulesResult = isAdvanced
       ? {
@@ -551,7 +579,7 @@ export class MediaRequest {
           ? user
           : undefined,
         is4k: requestBody.is4k,
-        serverId: requestBody.serverId,
+        serverId: requestedServiceId,
         isServiceRequest: isServiceSpecific,
         profileId: profileId,
         rootFolder: rootFolder,
@@ -697,11 +725,11 @@ export class MediaRequest {
           ? user
           : undefined,
         is4k: requestBody.is4k,
-        serverId: requestBody.serverId,
+        serverId: requestedServiceId,
         isServiceRequest: isServiceSpecific,
         profileId: profileId,
         rootFolder: rootFolder,
-        languageProfileId: requestBody.languageProfileId,
+        languageProfileId: languageProfileId,
         tags: tags,
         seasons: finalSeasons.map(
           (sn) =>

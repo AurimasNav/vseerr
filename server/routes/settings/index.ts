@@ -824,6 +824,7 @@ settingsRoutes.get('/cache', async (_req, res) => {
   }));
 
   const tmdbImageCache = await ImageProxy.getImageStats('tmdb');
+  const tvdbImageCache = await ImageProxy.getImageStats('tvdb');
   const avatarImageCache = await ImageProxy.getImageStats('avatar');
 
   const stats: DnsStats | undefined = dnsCache?.getStats();
@@ -833,6 +834,7 @@ settingsRoutes.get('/cache', async (_req, res) => {
     apiCaches,
     imageCache: {
       tmdb: tmdbImageCache,
+      tvdb: tvdbImageCache,
       avatar: avatarImageCache,
     },
     dnsCache: {
